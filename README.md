@@ -27,6 +27,7 @@ New here? [GETTING-STARTED.md](GETTING-STARTED.md) takes you from nothing to you
 | **A Google account** | Free. Flow gives every account 50 credits a day; a paid Google AI plan adds more and unlocks 1080p downloads. Developed on a Pro plan |
 | **FFmpeg** *(optional)* | Mac: `brew install ffmpeg` · Windows: `winget install Gyan.FFmpeg`. Needed only to join clips, mix music or record narration |
 | **A Google AI Studio key** *(optional, free)* | Only for the Google narration voices. See below |
+| **whisper.cpp** *(optional, free)* | Only for captions: it hears the words, on your computer. Mac: `brew install whisper-cpp` · Windows: `whisper-cli.exe` from [the whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases), on your PATH. The speech model it needs (148 MB) is one click in the Captions tab |
 
 A display must stay awake: the Chrome window is really being driven, so the machine cannot be
 headless or asleep mid-run.
@@ -143,7 +144,7 @@ npm run studio     # then open http://127.0.0.1:8787
 
 or double-click **Flow Studio.command** (Mac) or **Flow Studio.cmd** (Windows).
 
-Seven tabs, in the order you would use them:
+Eight tabs, in the order you would use them:
 
 - **Cast**: reusable characters. Create them, edit them in place, or build one from a picture.
 - **Frames**: free stills, with *match previous frame* to keep a set on-model.
@@ -156,6 +157,12 @@ Seven tabs, in the order you would use them:
 - **Cut**: join any videos into one film, in the order you pick. Upload one, or choose from films you've
   already made. Add a narration (from your saved ones or an upload) and music, and turn the clips' own
   sound down so the narration sits on top.
+- **Captions**: put the spoken words on screen, the way short-form videos do, on wide or vertical videos.
+  Pick a video, choose a style (Bold pop, Highlight, Word by word, Clean, Boxed), where it sits (bottom,
+  middle, top, an exact height, or tap the preview), its size and highlight colour, and see it on a real
+  frame of your video before anything is made. Fix any misheard word in the text box and it keeps its
+  timing; press Enter to start a new caption. Saves `<name>-captions.mp4` plus an `.srt` for YouTube.
+  Everything happens on your computer; nothing is uploaded.
 - **Library**: everything in your Flow project. Download it again for free (a scene comes down as one
   finished film, not loose clips), or move it to Flow's Trash.
 
@@ -196,6 +203,7 @@ agree on what is running. That API listens on 127.0.0.1 only and needs a per-run
 | `flow_techniques` | 39 film-technique prompt presets (camera moves, product shots, transitions, image commands); pass an id as a scene's `technique` |
 | `flow_narrate` | Free narration audio, any length: `gemini` (Google AI Studio text-to-speech, with the same voices Flow has, plus a `style` note) or `mac` (a voice installed on this computer, no key needed) |
 | `flow_voices` | Narrator voices available, and whether a Google key is set up |
+| `flow_captions` | Burn spoken-word captions into any video, landscape or vertical, in one of five styles, at any height; returns the transcript so a misheard word can be fixed and the call repeated (local whisper.cpp, Chrome and FFmpeg, no credits) |
 | `flow_assemble` | Join clips into one MP4 (a project's clips, or any you list, in order) with optional music and voiceover, and separate volume for the clips' own sound (local FFmpeg, no credits) |
 
 **Continuity between shots:** `chain_previous` (this clip starts on the last frame of the previous
