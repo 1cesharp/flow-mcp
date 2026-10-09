@@ -159,9 +159,9 @@ Eight tabs, in the order you would use them:
   sound down so the narration sits on top.
 - **Captions**: put the spoken words on screen, the way short-form videos do, on wide or vertical videos.
   Pick a video, choose a style (Bold pop, Highlight, Word by word, Clean, Boxed), where it sits (bottom,
-  middle, top, an exact height, or tap the preview), its size and highlight colour, and see it on a real
-  frame of your video before anything is made. Fix any misheard word in the text box and it keeps its
-  timing; press Enter to start a new caption. Saves `<name>-captions.mp4` plus an `.srt` for YouTube.
+  middle, top, an exact height, or tap the preview), its size, its letters (normal, CAPS or lowercase) and
+  highlight colour, and see it on a real frame of your video before anything is made. Fix any misheard
+  word in the text box and it keeps its timing; press Enter to start a new caption. Saves `<name>-captions.mp4` plus an `.srt` for YouTube.
   Everything happens on your computer; nothing is uploaded.
 - **Library**: everything in your Flow project. Download it again for free (a scene comes down as one
   finished film, not loose clips), or move it to Flow's Trash.
@@ -203,7 +203,7 @@ agree on what is running. That API listens on 127.0.0.1 only and needs a per-run
 | `flow_techniques` | 39 film-technique prompt presets (camera moves, product shots, transitions, image commands); pass an id as a scene's `technique` |
 | `flow_narrate` | Free narration audio, any length: `gemini` (Google AI Studio text-to-speech, with the same voices Flow has, plus a `style` note) or `mac` (a voice installed on this computer, no key needed) |
 | `flow_voices` | Narrator voices available, and whether a Google key is set up |
-| `flow_captions` | Burn spoken-word captions into any video, landscape or vertical, in one of five styles, at any height; returns the transcript so a misheard word can be fixed and the call repeated (local whisper.cpp, Chrome and FFmpeg, no credits) |
+| `flow_captions` | Burn spoken-word captions into any video, landscape or vertical, in one of five styles, at any height, in normal, capital or lowercase letters; returns the transcript so a misheard word can be fixed and the call repeated (local whisper.cpp, Chrome and FFmpeg, no credits) |
 | `flow_assemble` | Join clips into one MP4 (a project's clips, or any you list, in order) with optional music and voiceover, and separate volume for the clips' own sound (local FFmpeg, no credits) |
 
 **Continuity between shots:** `chain_previous` (this clip starts on the last frame of the previous

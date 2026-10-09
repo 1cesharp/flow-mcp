@@ -65,6 +65,10 @@ const captionFields = {
     .describe("bottom, middle or top - or a number for an exact height: how far down the frame the middle of the caption sits, 0 = top edge, 100 = bottom edge."),
   size: z.enum(["small", "medium", "large"]).default("medium"),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe("Highlight colour as #RRGGBB, for bold, highlight and reveal."),
+  letters: z
+    .enum(["as_said", "capitals", "lowercase"])
+    .optional()
+    .describe("as_said keeps normal capitals (sentence starts, names); capitals is the high-energy short-form look; lowercase is the calm, casual look. Default: capitals for bold, as_said for the rest."),
   text: z.string().max(50_000).optional().describe("Corrected words, to fix anything misheard. Timings are kept for every word that still matches; a line break starts a new caption."),
   language: z.string().default("auto").describe("Spoken language code (en, es, de...) or auto."),
 };

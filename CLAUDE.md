@@ -456,3 +456,8 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   with no word margin it swallowed the space beside it ("EVERYTHINGAFTER"), so words carry a .07em margin.
   First Ascent's finished film survived the Trash only because it was published in an artifact (film.mp4); it is back
   at ~/flow-mcp-out/Ascent/ascent-1080.mp4.
+- Caption letters (2026-10-09): `letters` as_said | capitals | lowercase, per style in the panel (Bold pop defaults
+  to capitals, the rest to as_said). It is a CSS text-transform on the drawn captions only; the .srt keeps the words as
+  heard. capitals and lowercase drop trailing commas and full stops (? and ! stay), the short-form convention; capitals
+  in a non-bold font take 1.2x the line width, lowercase in Arial Black 0.85x. Panel labels are "Normal / CAPS /
+  lower" because "CAPITALS" and "lowercase" were cut off at 375 px wide.

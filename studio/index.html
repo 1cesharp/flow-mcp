@@ -375,6 +375,7 @@ audio{width:100%;margin-top:8px;filter:invert(1) hue-rotate(180deg)}
             <div><label class="f">Position</label><div class="seg" data-seg="cap_pos"></div></div>
             <div><label class="f">Size</label><div class="seg" data-seg="cap_size"></div></div>
           </div>
+          <label class="f">Letters</label><div class="seg" data-seg="cap_letters"></div>
           <label class="f">Exact height <span id="cap_yOut" style="text-transform:none;letter-spacing:0"></span></label>
           <input type="range" id="cap_y" min="5" max="95" value="80" aria-label="How far down the screen the captions sit">
           <p class="empty" style="margin-top:4px">Drag to place the words anywhere, or tap the preview where you want them.</p>
@@ -488,6 +489,7 @@ const SEGS = {
   s_variants: { get: () => S.shots.variants, set: (v) => (S.shots.variants = +v), opts: [1, 2, 3, 4] },
   cap_pos: { get: () => (typeof S.captions.position === "string" ? S.captions.position : ""), set: (v) => { S.captions.position = v; capPreviewSoon(); }, opts: ["bottom", "middle", "top"], labels: { bottom: "Bottom", middle: "Middle", top: "Top" } },
   cap_size: { get: () => S.captions.size, set: (v) => { S.captions.size = v; capPreviewSoon(); }, opts: ["small", "medium", "large"], labels: { small: "Small", medium: "Medium", large: "Large" } },
+  cap_letters: { get: () => capLetters(S.captions.style), set: (v) => { (S.captions.letters ??= {})[S.captions.style] = v; capPreviewSoon(); }, opts: ["as_said", "capitals", "lowercase"], labels: { as_said: "Normal", capitals: "CAPS", lowercase: "lower" } },
   n_engine: { get: () => S.narrate.engine, set: (v) => (S.narrate.engine = v), opts: ["gemini", "mac"], labels: { gemini: "Google AI Studio", get mac() { return PLACE.local_engine; } } },
 };
 function renderSegs() {
@@ -842,9 +844,13 @@ const CAP_COLORS = {
 };
 let capHeard = "", capFor = "", capSetup = null, capTimer, capSeq = 0, capVertical = false;
 const capColor = (style) => S.captions.colors?.[style] ?? CAP_COLORS[style]?.[0];
+// Bold pop is capitals unless the user picks otherwise; every other style keeps the words as said.
+const capLetters = (style) => S.captions.letters?.[style] ?? (style === "bold" ? "capitals" : "as_said");
+const CASE_CSS = { as_said: "none", capitals: "uppercase", lowercase: "lowercase" };
 function capOpts() {
   const c = S.captions, o = { video: c.video.path, style: c.style, position: c.position, size: c.size };
   if (CAP_COLORS[c.style]) o.color = capColor(c.style);
+  o.letters = capLetters(c.style);
   const t = $("#cap_text").value;
   if (t.trim() && t.trim() !== capHeard.trim()) o.text = t;
   return o;
@@ -852,7 +858,7 @@ function capOpts() {
 function renderCaptions() {
   const c = S.captions;
   $("#cap_video").innerHTML = c.video ? `<div class="cliprow"><b>▶</b><span title="${esc(c.video.path)}">${esc(c.video.name)}</span><button type="button" id="cap_clear" aria-label="Remove ${esc(c.video.name)}">×</button></div>` : "";
-  $("#cap_styles").innerHTML = CAP_STYLES.map((s) => `<button type="button" class="capstyle${c.style === s.id ? " on" : ""}" data-capstyle="${s.id}"><span class="demo d-${s.id}" style="--hl:${capColor(s.id) ?? "#fff"}"><span>${s.demo}</span></span><b>${s.name}</b><small>${s.blurb}</small></button>`).join("");
+  $("#cap_styles").innerHTML = CAP_STYLES.map((s) => `<button type="button" class="capstyle${c.style === s.id ? " on" : ""}" data-capstyle="${s.id}"><span class="demo d-${s.id}" style="--hl:${capColor(s.id) ?? "#fff"};text-transform:${CASE_CSS[capLetters(s.id)]}"><span>${s.demo}</span></span><b>${s.name}</b><small>${s.blurb}</small></button>`).join("");
   const cols = CAP_COLORS[c.style];
   $("#cap_colorWrap").hidden = !cols;
   if (cols) $("#cap_colors").innerHTML = cols.map((h) => `<button type="button" data-capcolor="${h}" class="${h === capColor(c.style) ? "on" : ""}" style="background:${h}" aria-label="Colour ${h}"></button>`).join("");

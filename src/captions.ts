@@ -43,25 +43,31 @@ export interface Transcript {
 }
 
 export const CAPTION_STYLES = {
-  bold: { label: "Bold pop", blurb: "Big capitals, a few words at a time; the word being said lights up", maxWords: 3, highlight: true, pop: true, color: "#FFE135" },
-  highlight: { label: "Highlight", blurb: "The word being said sits on a coloured block", maxWords: 4, highlight: true, pop: false, color: "#7C3AED" },
-  reveal: { label: "Word by word", blurb: "Each word appears the moment it is said", maxWords: 5, highlight: true, pop: false, color: "#FFFFFF" },
-  clean: { label: "Clean", blurb: "Classic subtitles: easy to read, nothing moves", maxWords: 8, highlight: false, pop: false, color: "#FFFFFF" },
-  boxed: { label: "Boxed", blurb: "White words on a dark band, readable over anything", maxWords: 7, highlight: false, pop: false, color: "#FFFFFF" },
+  bold: { label: "Bold pop", blurb: "Big capitals, a few words at a time; the word being said lights up", maxWords: 3, highlight: true, pop: true, color: "#FFE135", letters: "capitals" },
+  highlight: { label: "Highlight", blurb: "The word being said sits on a coloured block", maxWords: 4, highlight: true, pop: false, color: "#7C3AED", letters: "as_said" },
+  reveal: { label: "Word by word", blurb: "Each word appears the moment it is said", maxWords: 5, highlight: true, pop: false, color: "#FFFFFF", letters: "as_said" },
+  clean: { label: "Clean", blurb: "Classic subtitles: easy to read, nothing moves", maxWords: 8, highlight: false, pop: false, color: "#FFFFFF", letters: "as_said" },
+  boxed: { label: "Boxed", blurb: "White words on a dark band, readable over anything", maxWords: 7, highlight: false, pop: false, color: "#FFFFFF", letters: "as_said" },
 } as const;
 export type CaptionStyle = keyof typeof CAPTION_STYLES;
 // A preset, or how far down the frame the middle of the caption sits: 0 = top edge, 100 = bottom edge.
 export type CaptionPosition = "bottom" | "middle" | "top" | number;
 export type CaptionSize = "small" | "medium" | "large";
+// as_said keeps whisper's own capitals (sentence starts, names); capitals and lowercase are looks, and both drop
+// trailing commas and full stops the way short-form captions do.
+export type CaptionLetters = "as_said" | "capitals" | "lowercase";
 
 export interface CaptionOptions {
   style: CaptionStyle;
   position: CaptionPosition;
   size: CaptionSize;
   color?: string;
+  letters?: CaptionLetters;
   text?: string;
   language?: string;
 }
+
+const lettersOf = (o: { style: CaptionStyle; letters?: CaptionLetters }): CaptionLetters => o.letters ?? CAPTION_STYLES[o.style].letters;
 
 // Letter size as a share of the frame's short side, so a 9:16 phone video and a 16:9 landscape one read the same.
 const FONT = { bold: 7.2, highlight: 6.2, reveal: 6.4, clean: 4.6, boxed: 4.6 };
@@ -314,13 +320,15 @@ function paginate(words: Word[], maxWords: number, maxChars: number): Word[][] {
   return pages;
 }
 
-function layout(words: Word[], style: CaptionStyle, width: number, height: number, size: CaptionSize): { pages: Word[][]; states: State[] } {
+function layout(words: Word[], style: CaptionStyle, width: number, height: number, size: CaptionSize, letters: CaptionLetters): { pages: Word[][]; states: State[] } {
   const s = CAPTION_STYLES[style];
   const u = (Math.min(width, height) / 100) * SIZE[size];
-  const perLine = Math.max(8, Math.floor(boxWidth(style, width, height) / (FONT[style] * u * CHAR_EM[style])));
+  // Capitals are wider than small letters, so fewer of them fit on a line.
+  const wide = CHAR_EM[style] * (letters === "capitals" && style !== "bold" ? 1.2 : letters !== "capitals" && style === "bold" ? 0.85 : 1);
+  const perLine = Math.max(8, Math.floor(boxWidth(style, width, height) / (FONT[style] * u * wide)));
   const pages = paginate(words, s.maxWords, perLine * 2);
-  // Bold capitals read better without commas and full stops; question and exclamation marks stay.
-  const shown = (t: string) => (style === "bold" ? t.replace(/[.,;:]+$/, "") : t);
+  // Capitals and lowercase read better without commas and full stops; question and exclamation marks stay.
+  const shown = (t: string) => (letters === "as_said" ? t : t.replace(/[.,;:]+$/, ""));
   const states: State[] = [];
   let clock = 0;
   const push = (st: State) => {
@@ -364,7 +372,7 @@ function textOn(hex: string): string {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? "#111111" : "#FFFFFF";
 }
 
-function pageHtml(style: CaptionStyle, o: { width: number; height: number; position: CaptionPosition; size: CaptionSize; color: string; background?: string }): string {
+function pageHtml(style: CaptionStyle, o: { width: number; height: number; position: CaptionPosition; size: CaptionSize; color: string; letters: CaptionLetters; background?: string }): string {
   const { width: W, height: H } = o;
   const vertical = H > W;
   const font = FONT[style] * (Math.min(W, H) / 100) * SIZE[o.size];
@@ -393,6 +401,7 @@ html,body{margin:0;width:${W}px;height:${H}px;overflow:hidden;background:${o.bac
 .cap{position:absolute;left:50%;width:${boxWidth(style, W, H)}px;text-align:center;text-wrap:balance;--hl:${o.color};--on:${textOn(o.color)};${place};-webkit-font-smoothing:antialiased}
 .inner{display:block;transform-origin:50% 60%}
 ${css}
+.cap{text-transform:${{ as_said: "none", capitals: "uppercase", lowercase: "lowercase" }[o.letters]}}
 </style></head><body><div class="cap"><div class="inner" id="inner"></div></div><script>
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 window.paint = (s) => {
@@ -456,7 +465,7 @@ async function timedWords(video: string, o: CaptionOptions): Promise<{ transcrip
 export async function previewCaptions(video: string, o: CaptionOptions): Promise<{ image: string; at: number }> {
   const info = await probe(video);
   const { words } = await timedWords(video, o);
-  const { pages, states } = layout(words, o.style, info.width, info.height, o.size);
+  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o));
   // A caption of a few words, about a third of the way in, mid-sentence.
   const want = (pages[0]?.[0].start ?? 0) + ((pages.at(-1)?.at(-1)?.end ?? 0) - (pages[0]?.[0].start ?? 0)) * 0.33;
   const page = pages.filter((p) => p.length >= Math.min(2, CAPTION_STYLES[o.style].maxWords)).sort((p, q) => Math.abs(p[0].start - want) - Math.abs(q[0].start - want))[0] ?? pages[0];
@@ -470,7 +479,7 @@ export async function previewCaptions(video: string, o: CaptionOptions): Promise
   await run(FFMPEG, ["-v", "error", "-y", "-ss", at.toFixed(3), "-i", video, "-frames:v", "1", "-q:v", "3", frame], BIG);
   const background = `data:image/jpeg;base64,${readFileSync(frame).toString("base64")}`;
   const image = join(CACHE_DIR, `preview-${key}.jpg`);
-  await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), background }), async (p) => {
+  await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o), background }), async (p) => {
     if (state) await p.evaluate((s) => (window as unknown as { paint: (s: unknown) => void }).paint(s), state);
     await p.screenshot({ path: image, type: "jpeg", quality: 85 });
   });
@@ -497,14 +506,14 @@ export interface CaptionResult {
 export async function burnCaptions(video: string, o: CaptionOptions, output: string): Promise<CaptionResult> {
   const info = await probe(video);
   const { transcript, words } = await timedWords(video, o);
-  const { pages, states } = layout(words, o.style, info.width, info.height, o.size);
+  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o));
   if (!states.length) throw new Error("There are no words to put on screen.");
 
   const work = mkdtempSync(join(tmpdir(), "flow-captions-"));
   try {
     // Draw every distinct caption once, as a transparent picture the size of the video.
     const files = new Map<string, string>();
-    await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o) }), async (p) => {
+    await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o) }), async (p) => {
       await p.screenshot({ path: join(work, "blank.png"), omitBackground: true });
       for (const s of states) {
         const id = JSON.stringify([s.words, s.active, s.scale]);
