@@ -43,11 +43,14 @@ async function cdpUp(): Promise<boolean> {
 
 // Real Chrome with a dedicated profile: Google sign-in works normally and the
 // session persists, while the user's everyday profile is never touched.
-async function launchChrome(): Promise<void> {
+export function chromeExecutable(): string {
   const chromePath = CHROME_PATHS.find((p) => existsSync(p));
-  if (!chromePath) {
-    throw new Error("Google Chrome not found. Set FLOW_MCP_CHROME to the Chrome executable path.");
-  }
+  if (!chromePath) throw new Error("Google Chrome not found. Set FLOW_MCP_CHROME to the Chrome executable path.");
+  return chromePath;
+}
+
+async function launchChrome(): Promise<void> {
+  const chromePath = chromeExecutable();
   mkdirSync(PROFILE_DIR, { recursive: true });
   const child = spawn(
     chromePath,

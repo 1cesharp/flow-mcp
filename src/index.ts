@@ -295,4 +295,16 @@ server.registerTool(
   (args) => reply(patient("flow_assemble", core.assemble(args))),
 );
 
+server.registerTool(
+  "flow_captions",
+  {
+    title: "Add captions to a video",
+    description:
+      "Burn spoken-word captions into a video, in the style short-form apps use, for landscape or vertical footage (local and free: whisper.cpp hears the words on this computer, nothing is uploaded). Styles: bold (big capitals, the spoken word lights up), highlight, reveal, clean, boxed. Saves <name>-captions.mp4 plus an .srt, and returns the transcript: if a word was misheard, call again with the corrected `text` - matching words keep their timing.",
+    inputSchema: shapes.captions,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  },
+  (args) => reply(patient("flow_captions", core.captions(args))),
+);
+
 await server.connect(new StdioServerTransport());

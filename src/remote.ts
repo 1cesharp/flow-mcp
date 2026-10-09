@@ -35,6 +35,11 @@ export class RemoteCore implements Core {
   continue_shot = (a: unknown) => call("continue_shot", a);
   agent = (a: unknown) => call("agent", a);
   outputs = () => call("outputs", {});
+  transcribe = (a: unknown) => call("transcribe", a);
+  caption_preview = (a: unknown) => call("caption_preview", a);
+  captions = (a: unknown) => call("captions", a);
+  caption_setup = () => call("caption_setup", {});
+  caption_model = () => call("caption_model", {});
 
   // Long waits are split up so no single HTTP request outlives fetch's header timeout.
   async wait(a: { job_ids?: string[]; timeout_seconds: number }): Promise<unknown> {

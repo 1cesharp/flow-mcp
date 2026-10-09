@@ -432,3 +432,27 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   a 250 ms hover then a wait for the More options button itself (locator.isVisible({ timeout }) does NOT wait - it
   answers at once), 250 ms polling, and each download held to a random 4-4.4 s (downloadPace). Measured on 6 images:
   4.2, 4.1, 4.2, 4.0, 4.4, 4.4 s, all 1024x1024 originals in scene order. Other hoverTile callers keep 900 ms.
+- CAPTIONS (built 2026-10-08, `src/captions.ts`, Studio tab "Captions", MCP `flow_captions`): Homebrew's ffmpeg 8.1
+  has NO text filters at all (no ass, subtitles, drawtext - no libass/freetype), so captions are drawn by headless
+  Chrome (playwright-core `chromium.launch` on the system Chrome with a throwaway profile, never the Flow profile) as
+  transparent full-frame PNGs, one per distinct caption state, played as an ffconcat image track with exact durations
+  and `overlay`-ed onto the video (libx264 veryfast crf 18, AAC copied). Words come from whisper.cpp (`whisper-cli`,
+  brew `whisper-cpp`) with `-ojf`: build words from TOKENS (leading space = new word), because `-ml 1 -sow` segments
+  run each word into the next and hide every pause. Measured against the waveform: plain token offsets land within
+  ~50 ms of the real word onset; `-dtw` (needs `-nfa`, else t_dtw is -1) was ~150 ms LATE; large-v3-turbo placed a
+  word 0.6 s early and drops punctuation - so small.en > base.en > ... > turbo. 20 s of speech: 1 s to transcribe,
+  ~0.3 s per preview, ~8 s to burn. Transcripts cache in ~/.flow-mcp/captions; the media route only serves
+  OUTPUT_ROOT, uploads and that folder (previews 404'd until it was allowed). Edited text is re-timed by LCS against
+  the heard words; a line break forces a new caption. Captions break at commas and sentence ends; `text-wrap:balance`
+  stops a lone word on line two. The model download (base.en, 148 MB, huggingface ggerganov/whisper.cpp) and
+  set_key are panel-only - a big download should be the user's click.
+- TESTING THE PANEL without touching the real one or Flow: a script that sets FLOW_MCP_PORT=8799, FLOW_MCP_HOME and
+  FLOW_MCP_OUTPUT to scratch dirs BEFORE dynamically importing dist/core.js + dist/server.js, overrides
+  core.status/characters/assets (status -> getFlowState -> getBrowser LAUNCHES the Flow Chrome when CDP is down), then
+  startServer(core); open http://127.0.0.1:8799 in the Browser pane. Kill the node pid itself afterwards - pkill on
+  the background shell left it listening.
+- Caption placement: `position` is bottom|middle|top or a number 0-100 (how far down the frame the caption's middle
+  sits); the panel has an exact-height slider and tap-the-preview. Bold pop scales the spoken word by 1.06 - at 1.08
+  with no word margin it swallowed the space beside it ("EVERYTHINGAFTER"), so words carry a .07em margin.
+  First Ascent's finished film survived the Trash only because it was published in an artifact (film.mp4); it is back
+  at ~/flow-mcp-out/Ascent/ascent-1080.mp4.

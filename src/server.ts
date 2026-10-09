@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { basename, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { CACHE_DIR as CAPTIONS_DIR } from "./captions.js";
 import { HOME_DIR } from "./chrome.js";
 import { OUTPUT_ROOT, shapes, type Core } from "./core.js";
 
@@ -43,7 +44,7 @@ function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
 const inside = (file: string, dir: string) => resolve(file).startsWith(resolve(dir) + sep);
 
 function sendMedia(req: IncomingMessage, res: ServerResponse, file: string) {
-  if (!(inside(file, OUTPUT_ROOT) || inside(file, UPLOAD_DIR)) || !existsSync(file)) return json(res, 404, { error: "Not found." });
+  if (!(inside(file, OUTPUT_ROOT) || inside(file, UPLOAD_DIR) || inside(file, CAPTIONS_DIR)) || !existsSync(file)) return json(res, 404, { error: "Not found." });
   const { size } = statSync(file);
   const type = MIME[extname(file).toLowerCase()] ?? "application/octet-stream";
   const range = req.headers.range?.match(/bytes=(\d*)-(\d*)/);

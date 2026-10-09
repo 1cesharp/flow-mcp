@@ -146,6 +146,29 @@ audio{width:100%;margin-top:8px;filter:invert(1) hue-rotate(180deg)}
 .cast-card b{display:block;font:800 20px var(--display);letter-spacing:.04em}
 .cast-card .grow{flex:1;min-width:0}
 .pickrow{display:grid;gap:8px}
+.capstyles{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.capstyle{display:flex;flex-direction:column;gap:8px;padding:10px;text-align:left;color:var(--bone);background:var(--ink);border:2px solid var(--line);border-radius:12px;cursor:pointer;font:500 16px var(--body)}
+.capstyle:hover{border-color:var(--bone)}
+.capstyle.on{border-color:var(--tally);box-shadow:inset 0 0 0 2px var(--tally)}
+.capstyle b{font:800 22px var(--display);letter-spacing:.05em;text-transform:uppercase}
+.capstyle small{color:var(--dim);font-size:15px;line-height:1.3}
+.demo{height:80px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 8px;text-align:center;background:linear-gradient(135deg,#46576b,#151b22);color:#fff;overflow:hidden}
+.demo em,.demo i{font-style:normal}
+.d-bold{font:900 25px/1.05 "Arial Black",Impact,sans-serif;text-transform:uppercase;text-shadow:2px 2px 0 #000,-2px 2px 0 #000,2px -2px 0 #000,-2px -2px 0 #000,0 3px 0 #000}
+.d-bold em{color:var(--hl)}
+.d-highlight{font:800 23px system-ui,sans-serif}
+.d-highlight em{background:var(--hl);color:#fff;padding:0 .2em;border-radius:.2em}
+.d-reveal{font:800 23px system-ui,sans-serif;text-shadow:2px 2px 0 #000,-2px 2px 0 #000,2px -2px 0 #000,-2px -2px 0 #000}
+.d-reveal i{opacity:.22}
+.d-clean{font:700 21px system-ui,sans-serif;text-shadow:0 1px 4px #000}
+.d-boxed{font:700 20px system-ui,sans-serif}
+.d-boxed span{background:rgba(0,0,0,.78);padding:.12em .45em;border-radius:.28em}
+.swatches{display:flex;gap:12px;flex-wrap:wrap}
+.swatches button{width:54px;height:54px;border-radius:50%;border:3px solid var(--line);cursor:pointer}
+.swatches button.on{border-color:var(--bone);box-shadow:0 0 0 3px var(--tally)}
+.capprev{border-radius:12px;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:140px;padding:0}
+.capprev img{display:block;max-width:100%;max-height:72vh;object-fit:contain;cursor:crosshair}
+.capprev .empty{padding:24px;text-align:center}
 @media(min-width:760px){.pickrow{grid-template-columns:1fr 1fr}}
 </style></head>
 <body>
@@ -165,6 +188,7 @@ audio{width:100%;margin-top:8px;filter:invert(1) hue-rotate(180deg)}
     <button data-tab="narrate">Voice<small>narration</small></button>
     <button data-tab="restyle">Restyle<small>edit a clip</small></button>
     <button data-tab="cut">Cut<small>assemble film</small></button>
+    <button data-tab="captions">Captions<small>words on screen</small></button>
     <button data-tab="library">Library<small>in Flow</small></button>
   </nav>
 
@@ -331,6 +355,40 @@ audio{width:100%;margin-top:8px;filter:invert(1) hue-rotate(180deg)}
         </div>
       </section>
 
+      <!-- CAPTIONS -->
+      <section class="panel" data-panel="captions">
+        <div class="step">Step 6</div>
+        <h2>Captions <small>free · local</small></h2>
+        <p class="lede">Put the spoken words on screen, the way short-form videos do, on wide or vertical videos. <span data-place="computer">This Mac</span> listens to the video and times every word itself; nothing is uploaded.</p>
+        <div id="cap_setup"></div>
+        <div class="card">
+          <label class="f">Video</label>
+          <div id="cap_video" class="cliplist"></div>
+          <div class="rowbtns" style="margin-top:8px">
+            <button type="button" class="btn small ghost" id="cap_up">Upload a video</button>
+            <button type="button" class="btn small ghost" id="cap_film">From my films</button>
+          </div>
+          <div class="rowbtns" style="flex-wrap:nowrap"><input type="text" id="cap_path" spellcheck="false" placeholder="…or paste where a video is saved" style="flex:1;min-width:0"><button type="button" class="btn small" id="cap_pathgo">Use</button></div>
+          <label class="f">Style</label>
+          <div class="capstyles" id="cap_styles"></div>
+          <div class="grid2">
+            <div><label class="f">Position</label><div class="seg" data-seg="cap_pos"></div></div>
+            <div><label class="f">Size</label><div class="seg" data-seg="cap_size"></div></div>
+          </div>
+          <label class="f">Exact height <span id="cap_yOut" style="text-transform:none;letter-spacing:0"></span></label>
+          <input type="range" id="cap_y" min="5" max="95" value="80" aria-label="How far down the screen the captions sit">
+          <p class="empty" style="margin-top:4px">Drag to place the words anywhere, or tap the preview where you want them.</p>
+          <div id="cap_colorWrap"><label class="f">Highlight colour</label><div class="swatches" id="cap_colors"></div></div>
+          <label class="f">Preview <span id="cap_previewNote" style="text-transform:none;letter-spacing:0"></span></label>
+          <div class="capprev"><img id="cap_preview" alt="Your video with the captions on it" hidden><p class="empty" id="cap_previewEmpty">Pick a video to see your captions on it.</p></div>
+          <label class="f" for="cap_text">The words <span id="cap_textNote" style="text-transform:none;letter-spacing:0"></span></label>
+          <textarea id="cap_text" placeholder="The words appear here once the video has been listened to."></textarea>
+          <p class="empty" style="margin-top:6px">Fix anything misheard: each word keeps its timing. Press Enter to start a new caption at that point.</p>
+          <div class="rowbtns"><button class="btn" id="cap_go">Add captions</button></div>
+          <div id="cap_out" style="margin-top:16px"></div>
+        </div>
+      </section>
+
       <!-- LIBRARY -->
       <section class="panel" data-panel="library">
         <div class="step">Reference</div>
@@ -396,6 +454,7 @@ const DEFAULTS = {
   shots: { project: "MyFilm", model: "Omni 1.1 Flash", aspect: "16:9", duration: 8, resolution: "720p", variants: 1, quality: "original", max: 25, scenes: [blank()] },
   narrate: { project: "MyFilm", engine: "gemini", geminiVoice: "Charon", macVoice: "Zoe (Premium)", text: "", style: "" },
   cut: { project: "MyFilm", music: null, voiceover: null, hold: true, clips: [] },
+  captions: { video: null, style: "bold", position: "bottom", size: "medium", colors: {}, text: "" },
 };
 const S = Object.assign(structuredClone(DEFAULTS), JSON.parse(localStorage.getItem("flow-studio-v2") || "{}"));
 const save = () => localStorage.setItem("flow-studio-v2", JSON.stringify(S));
@@ -409,6 +468,8 @@ function showTab(name) {
   // Each tab shows the files it can use. Voice has its own narration list and Library its own Flow list, so the
   // gallery would only be in the way there.
   $("#galCard").hidden = !GALLERY_KINDS[name];
+  if (name === "captions" && LIVE && S.captions.video && capFor !== S.captions.video.path) capListen();
+  else if (name === "captions" && LIVE) capReady();
   if (GAL.length) renderGallery();
   estimate();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -425,6 +486,8 @@ const SEGS = {
   s_resolution: { get: () => S.shots.resolution, set: (v) => (S.shots.resolution = v), opts: ["360p", "720p"] },
   s_quality: { get: () => S.shots.quality, set: (v) => (S.shots.quality = v), opts: ["original", "upscaled"], labels: { original: "720p", upscaled: "1080p" } },
   s_variants: { get: () => S.shots.variants, set: (v) => (S.shots.variants = +v), opts: [1, 2, 3, 4] },
+  cap_pos: { get: () => (typeof S.captions.position === "string" ? S.captions.position : ""), set: (v) => { S.captions.position = v; capPreviewSoon(); }, opts: ["bottom", "middle", "top"], labels: { bottom: "Bottom", middle: "Middle", top: "Top" } },
+  cap_size: { get: () => S.captions.size, set: (v) => { S.captions.size = v; capPreviewSoon(); }, opts: ["small", "medium", "large"], labels: { small: "Small", medium: "Medium", large: "Large" } },
   n_engine: { get: () => S.narrate.engine, set: (v) => (S.narrate.engine = v), opts: ["gemini", "mac"], labels: { gemini: "Google AI Studio", get mac() { return PLACE.local_engine; } } },
 };
 function renderSegs() {
@@ -450,6 +513,7 @@ function slotHtml(kind, i, val, label) {
           : `<span>${label}</span><span class="two"><button type="button" data-src="upload">Upload</button><button type="button" data-src="flow">${/music|voiceover/.test(kind) ? "My narrations" : "From Flow"}</button></span>`}</div>`;
 }
 function setSlot(kind, idx, val) {
+  if (kind === "capvideo") return void setCapVideo(val);
   if (kind === "cast") castImage = val;
   else if (kind === "music" || kind === "voiceover") S.cut[kind] = val;
   else if (kind === "clip") { (S.cut.clips ??= []); if (val) S.cut.clips.push(val); }
@@ -732,8 +796,11 @@ function renderClips() {
 }
 $("#c_clips").addEventListener("click", (e) => { const b = e.target.closest("[data-clipdel]"); if (!b) return; S.cut.clips.splice(+b.dataset.clipdel, 1); save(); renderClips(); });
 $("#c_addup").onclick = () => { pickTarget = { kind: "clip", i: 0 }; $("#file").accept = "video/*"; $("#file").click(); };
-$("#c_addfilm").onclick = async () => {
+let filmFor = "cut";
+$("#c_addfilm").onclick = () => openFilms("cut");
+async function openFilms(target) {
   if (!guard()) return;
+  filmFor = target;
   $("#picker h2").textContent = "Pick from my films"; $("#picker p.empty").textContent = `Videos already saved on ${PLACE.computer}.`;
   $("#pickList").innerHTML = `<p class="empty">Reading your films…</p>`; picker.showModal();
   try {
@@ -741,9 +808,9 @@ $("#c_addfilm").onclick = async () => {
     const vids = projects.flatMap((p) => p.files.filter((f) => f.kind === "video").map((f) => ({ path: f.path, name: `${p.name} / ${f.name}` })));
     $("#pickList").innerHTML = vids.map((v) => `<button data-film="${esc(v.path)}" data-name="${esc(v.name)}"><span>${esc(v.name)}</span><em>video</em></button>`).join("") || `<p class="empty">No saved videos yet.</p>`;
   } catch (err) { $("#pickList").innerHTML = `<p class="empty" style="color:var(--bad)">${esc(err.message)}</p>`; }
-};
+}
 $("#pickList").addEventListener("click", (e) => { const b = e.target.closest("button[data-audio]"); if (!b || !pickTarget) return; setSlot(pickTarget.kind, pickTarget.i, { path: b.dataset.audio, name: b.dataset.name }); picker.close(); });
-$("#pickList").addEventListener("click", (e) => { const b = e.target.closest("button[data-film]"); if (!b) return; (S.cut.clips ??= []).push({ path: b.dataset.film, name: b.dataset.name }); save(); renderClips(); picker.close(); });
+$("#pickList").addEventListener("click", (e) => { const b = e.target.closest("button[data-film]"); if (!b) return; if (filmFor === "captions") { picker.close(); return void setCapVideo({ path: b.dataset.film, name: b.dataset.name }); } (S.cut.clips ??= []).push({ path: b.dataset.film, name: b.dataset.name }); save(); renderClips(); picker.close(); });
 $("#c_vol").oninput = (e) => ($("#c_volOut").textContent = e.target.value + "%");
 $("#c_clipvol").oninput = (e) => ($("#c_clipVolOut").textContent = e.target.value + "%");
 $("#c_hold").onchange = (e) => { S.cut.hold = e.target.checked; save(); };
@@ -753,10 +820,130 @@ $("#c_go").onclick = async () => {
   try {
     const out = await api("assemble", { project: $("#c_project").value.trim() || "MyFilm", clips: S.cut.clips?.length ? S.cut.clips.map((c) => c.path) : undefined, music: S.cut.music?.path, voiceover: S.cut.voiceover?.path, music_volume: +$("#c_vol").value / 100, clip_volume: +$("#c_clipvol").value / 100, hold_last_frame: $("#c_hold").checked, output_name: "final" });
     $("#c_out").innerHTML = `<video controls playsinline src="${media(out.output)}&t=${Date.now()}" style="width:100%;border-radius:12px;background:#000"></video>
-      <p class="empty" style="margin-top:8px">${out.clips.length} clip(s) · ${out.duration.toFixed(1)}s${out.held_last_frame ? ` · last frame held ${out.held_last_frame}s for the narration` : ""}<br>${esc(out.output)}</p>`;
+      <p class="empty" style="margin-top:8px">${out.clips.length} clip(s) · ${out.duration.toFixed(1)}s${out.held_last_frame ? ` · last frame held ${out.held_last_frame}s for the narration` : ""}<br>${esc(out.output)}</p>
+      <div class="rowbtns"><button type="button" class="btn small" data-capthis="${esc(out.output)}">Add captions to this film</button></div>`;
     loadGallery();
   } catch (err) { $("#c_out").innerHTML = `<p class="empty" style="color:var(--bad)">${esc(err.message)}</p>`; toast(err.message, true); }
   b.disabled = false; b.textContent = "Assemble film";
+};
+
+/* ---------- captions ---------- */
+const CAP_STYLES = [
+  { id: "bold", name: "Bold pop", blurb: "Big capitals; the spoken word lights up", demo: "Like <em>this</em>" },
+  { id: "highlight", name: "Highlight", blurb: "The spoken word on a coloured block", demo: "like <em>this</em> one" },
+  { id: "reveal", name: "Word by word", blurb: "Words appear as they are said", demo: "word by <i>word</i>" },
+  { id: "clean", name: "Clean", blurb: "Classic subtitles; nothing moves", demo: "Easy to read" },
+  { id: "boxed", name: "Boxed", blurb: "White words on a dark band", demo: "<span>Readable anywhere</span>" },
+];
+const CAP_COLORS = {
+  bold: ["#FFE135", "#9FE06A", "#FF5A1F", "#38BDF8", "#FF4FA3"],
+  highlight: ["#7C3AED", "#16A34A", "#E11D48", "#2563EB", "#F59E0B"],
+  reveal: ["#FFFFFF", "#FFE135", "#9FE06A", "#38BDF8", "#FF4FA3"],
+};
+let capHeard = "", capFor = "", capSetup = null, capTimer, capSeq = 0, capVertical = false;
+const capColor = (style) => S.captions.colors?.[style] ?? CAP_COLORS[style]?.[0];
+function capOpts() {
+  const c = S.captions, o = { video: c.video.path, style: c.style, position: c.position, size: c.size };
+  if (CAP_COLORS[c.style]) o.color = capColor(c.style);
+  const t = $("#cap_text").value;
+  if (t.trim() && t.trim() !== capHeard.trim()) o.text = t;
+  return o;
+}
+function renderCaptions() {
+  const c = S.captions;
+  $("#cap_video").innerHTML = c.video ? `<div class="cliprow"><b>▶</b><span title="${esc(c.video.path)}">${esc(c.video.name)}</span><button type="button" id="cap_clear" aria-label="Remove ${esc(c.video.name)}">×</button></div>` : "";
+  $("#cap_styles").innerHTML = CAP_STYLES.map((s) => `<button type="button" class="capstyle${c.style === s.id ? " on" : ""}" data-capstyle="${s.id}"><span class="demo d-${s.id}" style="--hl:${capColor(s.id) ?? "#fff"}"><span>${s.demo}</span></span><b>${s.name}</b><small>${s.blurb}</small></button>`).join("");
+  const cols = CAP_COLORS[c.style];
+  $("#cap_colorWrap").hidden = !cols;
+  if (cols) $("#cap_colors").innerHTML = cols.map((h) => `<button type="button" data-capcolor="${h}" class="${h === capColor(c.style) ? "on" : ""}" style="background:${h}" aria-label="Colour ${h}"></button>`).join("");
+  $("#cap_path").placeholder = `…or paste where a video is saved on ${PLACE.computer}`;
+  // Presets show where they put the words on this video's shape; a number is the user's own height.
+  const y = typeof c.position === "number" ? c.position : { top: capVertical ? 18 : 12, middle: 50, bottom: capVertical ? 75 : 87 }[c.position];
+  $("#cap_y").value = y;
+  $("#cap_yOut").textContent = typeof c.position === "number" ? `· ${y}% down` : `· ${c.position}`;
+  $("#cap_go").disabled = !c.video;
+}
+function showPreview(src, msg, bad) {
+  $("#cap_preview").hidden = !src;
+  if (src) $("#cap_preview").src = src;
+  const e = $("#cap_previewEmpty"); e.hidden = Boolean(src);
+  e.textContent = msg ?? "Pick a video to see your captions on it."; e.style.color = bad ? "var(--bad)" : "";
+}
+// Setup is checked once: whisper.cpp to hear the words, and a speech model it listens with.
+async function capReady() {
+  if (capSetup?.ready) return true;
+  try { capSetup = await api("caption_setup"); } catch (err) { toast(err.message, true); return false; }
+  const s = capSetup;
+  $("#cap_setup").innerHTML = s.ready ? "" : `<div class="hint" style="margin:0 0 18px"><b>One-time setup.</b> To hear the words, captions need two free things on ${PLACE.computer}:<br>
+    ${s.whisper ? "✓ whisper.cpp is installed" : `<b>1.</b> whisper.cpp: ${esc(s.whisper_hint)}`}<br>
+    ${s.model ? `✓ Speech model: ${esc(s.model)}` : `<b>2.</b> A speech model (148 MB, from whisper.cpp's own page) <div class="rowbtns" style="margin-top:10px"><button class="btn small" id="cap_getmodel" type="button">Get the speech model</button></div>`}
+    ${s.whisper ? "" : `<div class="rowbtns" style="margin-top:10px"><button class="btn small ghost" id="cap_recheck" type="button">I've installed it — check again</button></div>`}</div>`;
+  return s.ready;
+}
+async function setCapVideo(v) {
+  S.captions.video = v; S.captions.text = ""; save();
+  capHeard = ""; capFor = ""; $("#cap_text").value = ""; $("#cap_out").innerHTML = "";
+  renderCaptions(); await capListen();
+}
+async function capListen() {
+  const c = S.captions;
+  if (!c.video || !guard() || !(await capReady())) return;
+  showPreview(null, "Listening to the video…"); $("#cap_textNote").textContent = "";
+  try {
+    const out = await api("transcribe", { video: c.video.path });
+    capHeard = out.text; capFor = c.video.path;
+    $("#cap_text").value = c.text || out.text;
+    $("#cap_textNote").textContent = `· ${out.words} words heard`;
+    await capPreview();
+  } catch (err) { showPreview(null, err.message, true); }
+}
+async function capPreview() {
+  const c = S.captions;
+  if (!c.video || capFor !== c.video.path) return;
+  const seq = ++capSeq; $("#cap_previewNote").textContent = "· updating…";
+  try {
+    const out = await api("caption_preview", capOpts());
+    if (seq !== capSeq) return;
+    showPreview(`${media(out.image)}&t=${Date.now()}`);
+    $("#cap_previewNote").textContent = `· a frame at ${out.at.toFixed(1)}s`;
+  } catch (err) { if (seq === capSeq) { showPreview(null, err.message, true); $("#cap_previewNote").textContent = ""; } }
+}
+function capPreviewSoon(ms = 350) { clearTimeout(capTimer); capTimer = setTimeout(capPreview, ms); }
+$("#cap_styles").addEventListener("click", (e) => { const b = e.target.closest("[data-capstyle]"); if (!b) return; S.captions.style = b.dataset.capstyle; save(); renderCaptions(); capPreviewSoon(); });
+$("#cap_colors").addEventListener("click", (e) => { const b = e.target.closest("[data-capcolor]"); if (!b) return; (S.captions.colors ??= {})[S.captions.style] = b.dataset.capcolor; save(); renderCaptions(); capPreviewSoon(); });
+$("#cap_video").addEventListener("click", (e) => { if (!e.target.closest("#cap_clear")) return; S.captions.video = null; S.captions.text = ""; save(); capHeard = ""; capFor = ""; $("#cap_text").value = ""; $("#cap_textNote").textContent = ""; showPreview(null); renderCaptions(); });
+$("#cap_up").onclick = () => { pickTarget = { kind: "capvideo", i: 0 }; $("#file").accept = "video/*"; $("#file").click(); };
+$("#cap_film").onclick = () => openFilms("captions");
+$("#cap_pathgo").onclick = () => { const p = $("#cap_path").value.trim().replace(/^["']|["']$/g, ""); if (!p) return; $("#cap_path").value = ""; setCapVideo({ path: p, name: p.split(/[\\/]/).pop() }); };
+const capPlace = (y) => { S.captions.position = Math.round(Math.min(95, Math.max(5, y))); save(); renderSegs(); renderCaptions(); capPreviewSoon(); };
+$("#cap_y").addEventListener("input", (e) => capPlace(+e.target.value));
+$("#cap_preview").addEventListener("click", (e) => { const r = e.target.getBoundingClientRect(); capPlace(((e.clientY - r.top) / r.height) * 100); });
+$("#cap_preview").addEventListener("load", (e) => { const v = e.target.naturalHeight > e.target.naturalWidth; if (v !== capVertical) { capVertical = v; renderCaptions(); } });
+$("#cap_path").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#cap_pathgo").click(); });
+$("#cap_text").addEventListener("input", () => { S.captions.text = $("#cap_text").value.trim() === capHeard.trim() ? "" : $("#cap_text").value; save(); capPreviewSoon(1200); });
+document.addEventListener("click", async (e) => {
+  const take = e.target.closest("[data-capthis]");
+  if (take) { const p = take.dataset.capthis; showTab("captions"); return void setCapVideo({ path: p, name: p.split(/[\\/]/).pop() }); }
+  if (e.target.closest("#cap_recheck")) { capSetup = null; if (await capReady()) capListen(); }
+  const get = e.target.closest("#cap_getmodel");
+  if (get) {
+    get.disabled = true; get.textContent = "Downloading 148 MB…";
+    try { await api("caption_model"); capSetup = null; if (await capReady()) { toast("Speech model ready"); capListen(); } }
+    catch (err) { toast(err.message, true); get.disabled = false; get.textContent = "Get the speech model"; }
+  }
+});
+$("#cap_go").onclick = async () => {
+  const c = S.captions;
+  if (!c.video || !guard()) return;
+  const b = $("#cap_go"); b.disabled = true; b.textContent = "Adding captions…";
+  $("#cap_out").innerHTML = `<p class="empty">Drawing the captions and laying them over your video. A one-minute video takes about half a minute.</p>`;
+  try {
+    const out = await api("captions", capOpts());
+    $("#cap_out").innerHTML = `<video controls playsinline src="${media(out.output)}&t=${Date.now()}" style="width:100%;max-height:72vh;border-radius:12px;background:#000"></video>
+      <p class="empty" style="margin-top:8px">${out.captions} captions · ${out.words} words · ${out.duration.toFixed(1)}s<br>${esc(out.output)}<br>Subtitle file (for YouTube): ${esc(out.srt)}</p>`;
+    loadGallery();
+  } catch (err) { $("#cap_out").innerHTML = `<p class="empty" style="color:var(--bad)">${esc(err.message)}</p>`; toast(err.message, true); }
+  b.disabled = false; b.textContent = "Add captions";
 };
 
 /* ---------- library ---------- */
@@ -854,7 +1041,7 @@ async function loadGallery(prefer) {
   renderGallery(); renderTakes();
 }
 // Which saved files each tab's gallery shows. Shots uses stills as first and last frames as well as clips.
-const GALLERY_KINDS = { cast: ["image"], frames: ["image"], shots: ["video", "image"], restyle: ["video"], cut: ["video"] };
+const GALLERY_KINDS = { cast: ["image"], frames: ["image"], shots: ["video", "image"], restyle: ["video"], cut: ["video"], captions: ["video"] };
 // How to name this computer and its bin. Starts with the Mac wording and is replaced by what the server reports, so a
 // PC says "this PC" and "the Recycle Bin".
 let PLACE = { computer: "this Mac", bin: "the Mac's Trash", binShort: "Mac Trash", local_engine: "macOS voice", platform: "darwin" };
@@ -950,7 +1137,7 @@ function renderAll() {
   if (mus) mus.outerHTML = slotHtml("music", 0, S.cut.music, "Music track");
   if (vo) vo.outerHTML = slotHtml("voiceover", 0, S.cut.voiceover, "Narration");
   $("#c_hold").checked = S.cut.hold;
-  renderClips();
+  renderClips(); renderCaptions();
   if ($("#n_style")) $("#n_style").value = S.narrate.style ?? "";
   estimate(); save();
 }

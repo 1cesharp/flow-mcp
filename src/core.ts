@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { assemble, localVoices, speakLocally } from "./assemble.js";
 import { GEMINI_VOICES, geminiKey, saveGeminiKey, speakWithGemini } from "./gemini.js";
 import { extractLastFrame } from "./chain.js";
+import { burnCaptions, captionedName, captionSetup, downloadSpeechModel, previewCaptions, transcribe } from "./captions.js";
 import { characterLook, createCharacter, downloadAsset, trashAsset, editCharacter, getFlowState, listAssets, listCharacters, rememberCharacter, runAgentBatch, runContinue, runEdit, runGeneration } from "./flow.js";
 import { JobQueue, type Job } from "./queue.js";
 import { BIN, COMPUTER, IS_MAC, IS_WIN, moveToBin } from "./platform.js";
@@ -50,6 +51,24 @@ const sceneSchema = z.object({
 });
 
 // Raw shapes double as MCP input schemas and, wrapped in z.object, as HTTP body validators.
+const captionFields = {
+  video: z.string().min(1).describe("Absolute path of the video to caption: any MP4 or MOV on this computer, such as a film made with flow_assemble."),
+  style: z
+    .enum(["bold", "highlight", "reveal", "clean", "boxed"])
+    .default("bold")
+    .describe(
+      "bold: big capitals, 1-3 words at a time, the spoken word lights up (the short-form look). highlight: the spoken word sits on a coloured block. reveal: words appear as they are said. clean: classic subtitles. boxed: white words on a dark band.",
+    ),
+  position: z
+    .union([z.enum(["bottom", "middle", "top"]), z.number().min(0).max(100)])
+    .default("bottom")
+    .describe("bottom, middle or top - or a number for an exact height: how far down the frame the middle of the caption sits, 0 = top edge, 100 = bottom edge."),
+  size: z.enum(["small", "medium", "large"]).default("medium"),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe("Highlight colour as #RRGGBB, for bold, highlight and reveal."),
+  text: z.string().max(50_000).optional().describe("Corrected words, to fix anything misheard. Timings are kept for every word that still matches; a line break starts a new caption."),
+  language: z.string().default("auto").describe("Spoken language code (en, es, de...) or auto."),
+};
+
 export const shapes = {
   status: { detailed: z.boolean().default(true).describe("false skips the plan/credits readout, which briefly opens Flow's account panel.") },
   generate: {
@@ -83,6 +102,14 @@ export const shapes = {
     output_name: z.string().default("final"),
     hold_last_frame: z.boolean().default(true).describe("Freeze the final frame so a longer voiceover is not cut off."),
   },
+  transcribe: { video: z.string().min(1), language: z.string().default("auto") },
+  caption_preview: captionFields,
+  captions: {
+    ...captionFields,
+    project: z.string().optional().describe("Films folder to save into. Default: the video's own folder when it is already in the films folder, otherwise 'Captions'."),
+  },
+  caption_setup: {},
+  caption_model: {},
   agent: {
     project: z.string().min(1).describe("Folder name for the downloaded images."),
     scenes: z.array(z.string().min(1)).min(1).max(50).describe("One image description per scene, in order."),
@@ -219,6 +246,11 @@ export interface Core {
   continue_shot(a: Args<"continue_shot">): Promise<unknown>;
   agent(a: Args<"agent">): Promise<unknown>;
   outputs(): Promise<unknown>;
+  transcribe(a: Args<"transcribe">): Promise<unknown>;
+  caption_preview(a: Args<"caption_preview">): Promise<unknown>;
+  captions(a: Args<"captions">): Promise<unknown>;
+  caption_setup(): Promise<unknown>;
+  caption_model(): Promise<unknown>;
 }
 
 // Flow's own voices: still offered when giving a character a voice, but narration no longer goes through Flow.
@@ -388,6 +420,34 @@ export class LocalCore implements Core {
 
   async assemble({ project, ...rest }: Args<"assemble">) {
     return assemble({ dir: projectDir(project), ...rest });
+  }
+
+  // Captions never touch Flow or its queue: whisper.cpp hears the words, a headless Chrome of its own draws them.
+  async transcribe({ video, language }: Args<"transcribe">) {
+    const t = await transcribe(video, language);
+    return { text: t.text, words: t.words.length, language: t.language, model: t.model };
+  }
+
+  async caption_preview(a: Args<"caption_preview">) {
+    return previewCaptions(a.video, a);
+  }
+
+  async captions({ project, ...a }: Args<"captions">) {
+    // Save next to the video when it is already one of the user's films, otherwise in a Captions folder.
+    const rel = relative(OUTPUT_ROOT, dirname(a.video));
+    const inFilms = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+    const dir = project ? projectDir(project) : inFilms ? dirname(a.video) : projectDir("Captions");
+    mkdirSync(dir, { recursive: true });
+    return burnCaptions(a.video, a, captionedName(dir, a.video));
+  }
+
+  async caption_setup() {
+    return captionSetup();
+  }
+
+  // Panel only, like set_key: a 148 MB download should be the user's own click.
+  async caption_model() {
+    return downloadSpeechModel();
   }
 
   // Everything already downloaded, newest project first, so the panel can show past work after a restart.
