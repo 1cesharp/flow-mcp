@@ -444,8 +444,7 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   ~0.3 s per preview, ~8 s to burn. Transcripts cache in ~/.flow-mcp/captions; the media route only serves
   OUTPUT_ROOT, uploads and that folder (previews 404'd until it was allowed). Edited text is re-timed by LCS against
   the heard words; a line break forces a new caption. Captions break at commas and sentence ends; `text-wrap:balance`
-  stops a lone word on line two. The model download (base.en, 148 MB, huggingface ggerganov/whisper.cpp) and
-  set_key are panel-only - a big download should be the user's click.
+  stops a lone word on line two.
 - TESTING THE PANEL without touching the real one or Flow: a script that sets FLOW_MCP_PORT=8799, FLOW_MCP_HOME and
   FLOW_MCP_OUTPUT to scratch dirs BEFORE dynamically importing dist/core.js + dist/server.js, overrides
   core.status/characters/assets (status -> getFlowState -> getBrowser LAUNCHES the Flow Chrome when CDP is down), then
@@ -461,3 +460,12 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   heard. capitals and lowercase drop trailing commas and full stops (? and ! stay), the short-form convention; capitals
   in a non-bold font take 1.2x the line width, lowercase in Arial Black 0.85x. Panel labels are "Normal / CAPS /
   lower" because "CAPITALS" and "lowercase" were cut off at 375 px wide.
+- Speech model (2026-10-09, the user's call): it downloads BY ITSELF the first time words are needed - picking a video
+  in the Captions tab, or the first flow_captions call - not from a button. ggml-base.en.bin, 148 MB, from
+  huggingface ggerganov/whisper.cpp (FLOW_MCP_MODEL_URL for a mirror), into ~/.flow-mcp/models, via a .part file.
+  It uses CURL, not fetch: Node's built-in fetch (undici) crashed the whole process with "assert(!this.paused)" when
+  the server closed the connection mid-download, and that process is the panel or Claude's connector. caption_setup
+  is "ready" once whisper-cli exists; the panel shows "Getting the speech model (148 MB, one time only)" while it
+  downloads. Tested with a local stand-in server (HOME pointed at an empty folder): first use, two callers at once
+  (one download), a second download in the same panel process, and an unreachable server (clear error, no leftovers).
+  The real huggingface download has not been run from this code.

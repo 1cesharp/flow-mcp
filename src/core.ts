@@ -5,7 +5,7 @@ import { z } from "zod";
 import { assemble, localVoices, speakLocally } from "./assemble.js";
 import { GEMINI_VOICES, geminiKey, saveGeminiKey, speakWithGemini } from "./gemini.js";
 import { extractLastFrame } from "./chain.js";
-import { burnCaptions, captionedName, captionSetup, downloadSpeechModel, previewCaptions, transcribe } from "./captions.js";
+import { burnCaptions, captionedName, captionSetup, previewCaptions, transcribe } from "./captions.js";
 import { characterLook, createCharacter, downloadAsset, trashAsset, editCharacter, getFlowState, listAssets, listCharacters, rememberCharacter, runAgentBatch, runContinue, runEdit, runGeneration } from "./flow.js";
 import { JobQueue, type Job } from "./queue.js";
 import { BIN, COMPUTER, IS_MAC, IS_WIN, moveToBin } from "./platform.js";
@@ -113,7 +113,6 @@ export const shapes = {
     project: z.string().optional().describe("Films folder to save into. Default: the video's own folder when it is already in the films folder, otherwise 'Captions'."),
   },
   caption_setup: {},
-  caption_model: {},
   agent: {
     project: z.string().min(1).describe("Folder name for the downloaded images."),
     scenes: z.array(z.string().min(1)).min(1).max(50).describe("One image description per scene, in order."),
@@ -254,7 +253,6 @@ export interface Core {
   caption_preview(a: Args<"caption_preview">): Promise<unknown>;
   captions(a: Args<"captions">): Promise<unknown>;
   caption_setup(): Promise<unknown>;
-  caption_model(): Promise<unknown>;
 }
 
 // Flow's own voices: still offered when giving a character a voice, but narration no longer goes through Flow.
@@ -447,11 +445,6 @@ export class LocalCore implements Core {
 
   async caption_setup() {
     return captionSetup();
-  }
-
-  // Panel only, like set_key: a 148 MB download should be the user's own click.
-  async caption_model() {
-    return downloadSpeechModel();
   }
 
   // Everything already downloaded, newest project first, so the panel can show past work after a restart.

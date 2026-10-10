@@ -27,7 +27,7 @@ New here? [GETTING-STARTED.md](GETTING-STARTED.md) takes you from nothing to you
 | **A Google account** | Free. Flow gives every account 50 credits a day; a paid Google AI plan adds more and unlocks 1080p downloads. Developed on a Pro plan |
 | **FFmpeg** *(optional)* | Mac: `brew install ffmpeg` · Windows: `winget install Gyan.FFmpeg`. Needed only to join clips, mix music or record narration |
 | **A Google AI Studio key** *(optional, free)* | Only for the Google narration voices. See below |
-| **whisper.cpp** *(optional, free)* | Only for captions: it hears the words, on your computer. Mac: `brew install whisper-cpp` · Windows: `whisper-cli.exe` from [the whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases), on your PATH. The speech model it needs (148 MB) is one click in the Captions tab |
+| **whisper.cpp** *(optional, free)* | Only for captions: it hears the words, on your computer. Mac: `brew install whisper-cpp` · Windows: `whisper-cli.exe` from [the whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases), on your PATH. The speech model it needs (148 MB) downloads by itself the first time you caption a video |
 
 A display must stay awake: the Chrome window is really being driven, so the machine cannot be
 headless or asleep mid-run.

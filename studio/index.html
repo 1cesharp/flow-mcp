@@ -875,15 +875,13 @@ function showPreview(src, msg, bad) {
   const e = $("#cap_previewEmpty"); e.hidden = Boolean(src);
   e.textContent = msg ?? "Pick a video to see your captions on it."; e.style.color = bad ? "var(--bad)" : "";
 }
-// Setup is checked once: whisper.cpp to hear the words, and a speech model it listens with.
+// Setup is checked once. whisper.cpp has to be installed by the user; the speech model downloads itself on first use.
 async function capReady() {
   if (capSetup?.ready) return true;
   try { capSetup = await api("caption_setup"); } catch (err) { toast(err.message, true); return false; }
   const s = capSetup;
-  $("#cap_setup").innerHTML = s.ready ? "" : `<div class="hint" style="margin:0 0 18px"><b>One-time setup.</b> To hear the words, captions need two free things on ${PLACE.computer}:<br>
-    ${s.whisper ? "✓ whisper.cpp is installed" : `<b>1.</b> whisper.cpp: ${esc(s.whisper_hint)}`}<br>
-    ${s.model ? `✓ Speech model: ${esc(s.model)}` : `<b>2.</b> A speech model (148 MB, from whisper.cpp's own page) <div class="rowbtns" style="margin-top:10px"><button class="btn small" id="cap_getmodel" type="button">Get the speech model</button></div>`}
-    ${s.whisper ? "" : `<div class="rowbtns" style="margin-top:10px"><button class="btn small ghost" id="cap_recheck" type="button">I've installed it — check again</button></div>`}</div>`;
+  $("#cap_setup").innerHTML = s.ready ? "" : `<div class="hint" style="margin:0 0 18px"><b>One-time setup.</b> To hear the words, captions need whisper.cpp, a free program, on ${PLACE.computer}: ${esc(s.whisper_hint)}
+    <div class="rowbtns" style="margin-top:10px"><button class="btn small ghost" id="cap_recheck" type="button">I've installed it, check again</button></div></div>`;
   return s.ready;
 }
 async function setCapVideo(v) {
@@ -894,9 +892,12 @@ async function setCapVideo(v) {
 async function capListen() {
   const c = S.captions;
   if (!c.video || !guard() || !(await capReady())) return;
-  showPreview(null, "Listening to the video…"); $("#cap_textNote").textContent = "";
+  // The very first time, the speech model downloads before anything can be heard.
+  showPreview(null, capSetup?.model ? "Listening to the video…" : "Getting the speech model (148 MB, one time only), then listening to the video…");
+  $("#cap_textNote").textContent = "";
   try {
     const out = await api("transcribe", { video: c.video.path });
+    if (capSetup) capSetup.model = out.model;
     capHeard = out.text; capFor = c.video.path;
     $("#cap_text").value = c.text || out.text;
     $("#cap_textNote").textContent = `· ${out.words} words heard`;
@@ -931,12 +932,6 @@ document.addEventListener("click", async (e) => {
   const take = e.target.closest("[data-capthis]");
   if (take) { const p = take.dataset.capthis; showTab("captions"); return void setCapVideo({ path: p, name: p.split(/[\\/]/).pop() }); }
   if (e.target.closest("#cap_recheck")) { capSetup = null; if (await capReady()) capListen(); }
-  const get = e.target.closest("#cap_getmodel");
-  if (get) {
-    get.disabled = true; get.textContent = "Downloading 148 MB…";
-    try { await api("caption_model"); capSetup = null; if (await capReady()) { toast("Speech model ready"); capListen(); } }
-    catch (err) { toast(err.message, true); get.disabled = false; get.textContent = "Get the speech model"; }
-  }
 });
 $("#cap_go").onclick = async () => {
   const c = S.captions;

@@ -1,11 +1,8 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { cpus, homedir, tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
-import type { ReadableStream } from "node:stream/web";
 import { promisify } from "node:util";
 import { chromium, type Browser, type Page } from "playwright-core";
 
@@ -24,6 +21,9 @@ const WHISPER = process.env.FLOW_MCP_WHISPER ?? "whisper-cli";
 // Transcripts and preview stills; the panel is allowed to show pictures from here.
 export const CACHE_DIR = join(HOME_DIR, "captions");
 const MODEL_DIR = join(HOME_DIR, "models");
+// The model fetched on first use: whisper.cpp's own base.en, 148 MB. FLOW_MCP_MODEL_URL points it at a mirror.
+const MODEL_NAME = "ggml-base.en.bin";
+const MODEL_URL = process.env.FLOW_MCP_MODEL_URL ?? `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_NAME}`;
 const BIG = { maxBuffer: 64 * 1024 * 1024 };
 type RunError = NodeJS.ErrnoException & { stderr?: string };
 
@@ -89,6 +89,8 @@ const MODEL_PREFERENCE = [
   "ggml-large-v3.bin",
 ];
 
+class NoModel extends Error {}
+
 function findModel(language: string): string {
   if (process.env.FLOW_MCP_WHISPER_MODEL) return process.env.FLOW_MCP_WHISPER_MODEL;
   const dirs = [MODEL_DIR, join(homedir(), ".cache", "whisper-models"), join(homedir(), ".cache", "whisper.cpp")];
@@ -96,10 +98,7 @@ function findModel(language: string): string {
   // An English-only model cannot hear another language, so prefer a multilingual one when one is asked for.
   const wantOther = language !== "auto" && language !== "en";
   const pick = (wantOther ? found.find((p) => !p.includes(".en.")) : undefined) ?? found[0];
-  if (!pick)
-    throw new Error(
-      `Captions need a speech model to hear the words. Download ggml-small.en.bin (466 MB) or ggml-base.en.bin (148 MB) from huggingface.co/ggerganov/whisper.cpp and put it in ${MODEL_DIR}.`,
-    );
+  if (!pick) throw new NoModel();
   return pick;
 }
 
@@ -121,28 +120,35 @@ export async function captionSetup(): Promise<{ ready: boolean; whisper: boolean
   } catch {
     model = undefined;
   }
-  return { ready: whisper && Boolean(model), whisper, whisper_hint: whisper ? undefined : WHISPER_HINT, model, models_dir: MODEL_DIR };
+  // The model is not a precondition: it downloads itself the first time it is needed.
+  return { ready: whisper, whisper, whisper_hint: whisper ? undefined : WHISPER_HINT, model, models_dir: MODEL_DIR };
 }
 
-// The one-click "Get the speech model" in the panel: base.en from whisper.cpp's own model page, 148 MB.
-let fetching: Promise<{ model: string; size: number }> | null = null;
-export function downloadSpeechModel(): Promise<{ model: string; size: number }> {
+// Fetched by itself the first time captions are needed (the user chose this over a button, 2026-10-09). One download
+// at a time even if the panel and an assistant ask together; written to .part and renamed, so a cut-off download is
+// never mistaken for a model.
+let fetching: Promise<string> | null = null;
+function downloadSpeechModel(): Promise<string> {
   fetching ??= (async () => {
-    const name = "ggml-base.en.bin";
-    const dest = join(MODEL_DIR, name);
-    if (existsSync(dest)) return { model: name, size: statSync(dest).size };
+    const dest = join(MODEL_DIR, MODEL_NAME);
+    if (existsSync(dest)) return dest;
     mkdirSync(MODEL_DIR, { recursive: true });
-    const res = await fetch(`https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${name}`);
-    if (!res.ok || !res.body) throw new Error(`The speech model could not be downloaded (${res.status}). Try again in a moment.`);
+    // curl, not fetch: Node's built-in fetch can crash the whole process on an assertion (undici, "assert(!this.paused)")
+    // when a server closes the connection mid-stream - seen while testing this, and here that process is the panel or
+    // Claude's connector. curl ships with macOS and Windows 10+, follows the redirect to the download host, and can
+    // only fail itself.
     const part = `${dest}.part`;
-    await pipeline(Readable.fromWeb(res.body as unknown as ReadableStream), createWriteStream(part));
+    await run("curl", ["-L", "--fail", "--silent", "--show-error", "--connect-timeout", "20", "--retry", "2", "-o", part, MODEL_URL], BIG).catch((err: RunError) => {
+      rmSync(part, { force: true });
+      throw new Error(err.code === "ENOENT" ? "curl is not installed" : String(err.stderr || err.message).trim().split("\n").at(-1));
+    });
     const size = statSync(part).size;
     if (size < 100_000_000) {
       rmSync(part, { force: true });
-      throw new Error("The speech model arrived incomplete. Try again.");
+      throw new Error("it arrived incomplete");
     }
     renameSync(part, dest);
-    return { model: name, size };
+    return dest;
   })().finally(() => {
     fetching = null;
   });
@@ -195,7 +201,15 @@ function wordsFromTokens(json: { transcription: { tokens?: { text: string; offse
 export async function transcribe(video: string, language = "auto"): Promise<Transcript> {
   const info = await probe(video);
   if (!info.audio) throw new Error(`"${basename(video)}" has no sound, so there are no words to caption.`);
-  const model = findModel(language);
+  let model: string;
+  try {
+    model = findModel(language);
+  } catch (err) {
+    if (!(err instanceof NoModel)) throw err;
+    model = await downloadSpeechModel().catch((e: Error) => {
+      throw new Error(`Captions need a speech model, downloaded once (148 MB), and the download failed: ${e.message}. Check the internet connection and try again, or put ${MODEL_NAME} in ${MODEL_DIR} yourself.`);
+    });
+  }
   const lang = basename(model).includes(".en.") ? "en" : language;
   const st = statSync(video);
   const key = createHash("sha1").update(`${video}|${st.size}|${st.mtimeMs}|${basename(model)}|${lang}`).digest("hex").slice(0, 16);
