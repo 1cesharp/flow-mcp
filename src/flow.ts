@@ -188,13 +188,38 @@ export async function retryNewErrorTiles(
   return { errors, reachedKnown, retried };
 }
 
-async function waitForNewMedia(page: Page, before: string[], count: number, timeoutMs: number, job?: Job): Promise<string[]> {
+type MediaKind = "image" | "video";
+
+// New tiles that can be the result we are waiting for. Three things looked "new" here without being it (2026-10-09:
+// 31 finished clips reported failed with "tile menu has no Download item. It offered: Delete"):
+// - our OWN uploads (first/last frames, references - always named fm-<job>-...): an upload's tile shows up while it is
+//   still processing and only gets its final id a moment later, after the "before" snapshot, so it read as new;
+// - a tile of the wrong kind, such as the still that "Save frame" makes on the way to a continuation clip;
+// - a tile still rendering ("NN%").
+export async function freshMedia(page: Page, before: string[], kind?: MediaKind): Promise<string[]> {
+  const tiles = await page.evaluate(
+    (js) => {
+      const idOf = eval(js) as (t: Element) => string | undefined;
+      return [...document.querySelectorAll("flow-grid-tile-container")].map((t) => ({
+        id: idOf(t),
+        kind: t.querySelector("flow-video-tile") ? "video" : t.querySelector("flow-image-tile") ? "image" : "other",
+        label: t.getAttribute("aria-label") ?? "",
+        busy: /\d+%/.test((t as HTMLElement).innerText),
+      }));
+    },
+    TILE_ID_JS,
+  );
+  const ours = tiles.filter((t) => t.id && !before.includes(t.id) && !t.label.startsWith("fm-") && !t.busy && (!kind || t.kind === kind));
+  return [...new Set(ours.map((t) => t.id!))];
+}
+
+async function waitForNewMedia(page: Page, before: string[], count: number, timeoutMs: number, job?: Job, kind?: MediaKind): Promise<string[]> {
   const deadline = Date.now() + timeoutMs;
   let retriesLeft = job?.params.retries ?? 1;
   let failures = 0;
   while (Date.now() < deadline) {
     await pause(page, 2000);
-    const fresh = [...new Set((await mediaIds(page)).filter((id) => !before.includes(id)))];
+    const fresh = await freshMedia(page, before, kind);
     // New tiles are listed first, so anything beyond the requested count is not ours.
     if (fresh.length >= count) return fresh.slice(0, count);
     const progress = await page.evaluate(() =>
@@ -276,6 +301,19 @@ async function applySettings(page: Page, job: Job): Promise<number> {
 
 const ASSET_PREFIX = "asset:";
 
+// Waits for THIS upload by its own name until Flow has finished processing it (its picture carries a media id), so
+// a half-processed upload can never be taken for the next generation's result.
+async function waitForUpload(page: Page, name: string, timeoutMs: number): Promise<void> {
+  const tile = page.locator(`flow-grid-tile-container[aria-label="${name.replace(/"/g, '\\"')}"]:has([data-media-id])`);
+  await tile
+    .first()
+    .waitFor({ state: "attached", timeout: timeoutMs })
+    .catch(() => {
+      throw new Error(`Flow did not finish processing the upload "${name}" within ${Math.round(timeoutMs / 1000)}s.`);
+    });
+  await pause(page, 1000);
+}
+
 // Uploads under a unique filename so the asset can be picked unambiguously afterwards.
 // "asset:<name>" refers to something already in the Flow project (image, video, character) and skips the upload.
 async function uploadAsset(page: Page, job: Job, file: string, label: string): Promise<string> {
@@ -285,12 +323,11 @@ async function uploadAsset(page: Page, job: Job, file: string, label: string): P
   const staged = join(mkdtempSync(join(tmpdir(), "flow-mcp-")), name);
   copyFileSync(file, staged);
   await scrollToTop(page);
-  const before = await mediaIds(page);
   await page.getByRole("button", { name: "Add media menu" }).click();
   const chooser = page.waitForEvent("filechooser", { timeout: 10_000 });
   await page.getByRole("menuitem", { name: "Upload", exact: true }).click();
   await (await chooser).setFiles(staged);
-  await waitForNewMedia(page, before, 1, 90_000);
+  await waitForUpload(page, name, 90_000);
   return name;
 }
 
@@ -302,9 +339,29 @@ const optionByName = (list: Locator, name: string) =>
 
 // The frame pickers attach on click; the ingredients picker only previews and needs "Add to prompt".
 // Option names are "<asset name>" or "<asset name> Image|Video", so match on the prefix.
-async function attachAsset(page: Page, opener: Locator, assetName: string): Promise<void> {
-  await opener.click();
+export async function attachAsset(page: Page, opener: Locator, assetName: string): Promise<void> {
   const list = page.getByRole("listbox", { name: "Asset list" });
+  const all = page.getByRole("tab", { name: "All", exact: true });
+  const shows = (l: Locator, ms: number) => l.waitFor({ state: "visible", timeout: ms }).then(() => true, () => false);
+  // Twice on 2026-10-09 (a character, then an uploaded still) the click on the opener produced no picker at all, and
+  // the job died waiting for it. It never reproduced when replayed, so it was something transient in the way - most
+  // likely the upload menu still closing. Like the settings popover, the picker gets three tries, with Escape in
+  // between to clear whatever caught the click. The Start/End frame pickers have no tabs, hence list OR All tab.
+  let opened = false;
+  for (let attempt = 0; attempt < 3 && !opened; attempt++) {
+    if (attempt) {
+      await page.keyboard.press("Escape");
+      await pause(page, 800);
+    }
+    await opener.click();
+    opened = await Promise.race([shows(list, 5000), shows(all, 5000)]);
+  }
+  if (!opened) throw new Error(`Flow's media picker did not open (three tries) while attaching "${assetName}". Nothing was generated.`);
+  // The picker reopens on whichever tab was used last (Characters, after a character), so start from All each time.
+  if ((await all.isVisible().catch(() => false)) && (await all.getAttribute("aria-selected")) !== "true") {
+    await all.click();
+    await pause(page, 1000);
+  }
   await list.waitFor({ state: "visible", timeout: 10_000 });
   let option = optionByName(list, assetName);
   // Voices, characters and avatars live behind their own tabs, so look there when "All" does not have it.
@@ -613,7 +670,7 @@ export async function runGeneration(job: Job): Promise<string[]> {
   await start.click();
 
   const variants = s.variants ?? 1;
-  const fresh = await waitForNewMedia(page, before, variants, s.type === "image" ? IMAGE_TIMEOUT_MS : VIDEO_TIMEOUT_MS, job);
+  const fresh = await waitForNewMedia(page, before, variants, s.type === "image" ? IMAGE_TIMEOUT_MS : VIDEO_TIMEOUT_MS, job, s.type === "image" ? "image" : "video");
   job.progress = undefined;
 
   mkdirSync(s.output_dir, { recursive: true });
@@ -1048,7 +1105,7 @@ export async function runEdit(job: Job): Promise<string[]> {
   await page.getByRole("button", { name: "Back button to go to previous page" }).click();
   await pause(page, 2500);
   await ensureProjectGrid(page);
-  const fresh = await waitForNewMedia(page, before, 1, 90_000);
+  const fresh = await waitForNewMedia(page, before, 1, 90_000, undefined, "video");
   mkdirSync(s.output_dir, { recursive: true });
   const saved = await downloadMedia(page, fresh[0], join(s.output_dir, s.file_stem), s.download_quality);
   const after = await readCredits(page).catch(() => undefined);
@@ -1335,7 +1392,7 @@ export async function runContinue(job: Job): Promise<string[]> {
       break;
     }
 
-    const fresh = await waitForNewMedia(page, before, 1, VIDEO_TIMEOUT_MS, job);
+    const fresh = await waitForNewMedia(page, before, 1, VIDEO_TIMEOUT_MS, job, "video");
     job.progress = undefined;
     mkdirSync(s.output_dir, { recursive: true });
     const saved = await downloadMedia(page, fresh[0], join(s.output_dir, s.file_stem), s.download_quality);

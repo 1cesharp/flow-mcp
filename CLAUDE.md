@@ -244,6 +244,23 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   newer clip could not be found by name and flow_assets looked unchanged. runGeneration now renames each finished
   tile to `<project>-<file_stem>` through the tile menu's `Rename` (renameTile, best effort - a failed rename must
   never lose the clip). The user asked for this; it removes a whole class of confusion.
+- FALSE "FAILED" CLIPS (2026-10-09, 31 in one session, every clip that used first/last frames): the job grabbed its
+  OWN UPLOAD instead of the clip. Frames and reference files are uploaded as `fm-<job>-<label>`; the upload tile
+  appears at once ("image 0%") and only gets its media id when processing ends, which was after the "before"
+  snapshot, so it looked new. Its menu offers only Delete, hence "tile menu has no Download item. It offered: Delete",
+  while the real clip sat finished in the grid (flow_download by title always worked). Now: freshMedia() skips
+  `fm-` tiles, tiles still showing "NN%", and tiles of the wrong kind (a video job only accepts flow-video-tile, an
+  image job flow-image-tile; edit and continue jobs accept videos only, so "Save frame" stills are ignored too), and
+  uploadAsset waits for its own tile by name until it carries data-media-id. Replayed against the live grid: the old
+  logic picked fm-db88e712-end.png, the new one waits and then picks the clip. Then verified on a paid clip (4 credits,
+  the user's OK): Omni 1.1 Flash 4 s 360p from an uploaded first frame -> job "done" in 63 s, the clip downloaded,
+  opening on the frame, progress readout working ("14%").
+- SECOND REFERENCE (2026-10-09, twice: a character, then an uploaded still): the click on "Add ingredients" produced
+  no picker at all and the job died after 10 s. Not reproducible on demand (character + upload, even mid-processing,
+  all opened fine), so attachAsset now retries the opener three times with Escape in between, and always switches
+  the picker to its All tab (it reopens on the last tab used, e.g. Characters). Verified with a real free still:
+  "asset:Juno" + an uploaded file -> both attached, the generated still (not the upload) downloaded.
+  Also noted: getByRole("button", { name: "Ingredient" }) also counts a hidden button outside the composer.
 - Gemini TTS: a LONG `style` note makes the model ramble - a 45-word line with a 25-word delivery note produced 674
   SECONDS of audio. The same line with no style note is 20.5 s, with a short note 32 s. Keep style notes to a few
   words, and sanity-check the returned duration against the expected one before using it.
