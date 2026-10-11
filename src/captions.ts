@@ -52,7 +52,8 @@ export const CAPTION_STYLES = {
 export type CaptionStyle = keyof typeof CAPTION_STYLES;
 // A preset, or how far down the frame the middle of the caption sits: 0 = top edge, 100 = bottom edge.
 export type CaptionPosition = "bottom" | "middle" | "top" | number;
-export type CaptionSize = "small" | "medium" | "large";
+// A preset, or a percentage of the style's normal size (100 = medium).
+export type CaptionSize = "small" | "medium" | "large" | number;
 // as_said keeps whisper's own capitals (sentence starts, names); capitals and lowercase are looks, and both drop
 // trailing commas and full stops the way short-form captions do.
 export type CaptionLetters = "as_said" | "capitals" | "lowercase";
@@ -63,6 +64,8 @@ export interface CaptionOptions {
   size: CaptionSize;
   color?: string;
   letters?: CaptionLetters;
+  // Seconds the highlight runs ahead of the voice (see LEAD).
+  lead?: number;
   text?: string;
   language?: string;
 }
@@ -73,6 +76,13 @@ const lettersOf = (o: { style: CaptionStyle; letters?: CaptionLetters }): Captio
 const FONT = { bold: 7.2, highlight: 6.2, reveal: 6.4, clean: 4.6, boxed: 4.6 };
 const CHAR_EM = { bold: 0.74, highlight: 0.56, reveal: 0.56, clean: 0.52, boxed: 0.52 };
 const SIZE = { small: 0.82, medium: 1, large: 1.2 };
+const scaleOf = (size: CaptionSize) => (typeof size === "number" ? Math.min(2.5, Math.max(0.4, size / 100)) : SIZE[size]);
+
+// Measured on the First Ascent narration (2026-10-11): against where each word really starts in the sound, whisper
+// put about half the words on time and the other half 0.13-0.18 s late - and a late highlight shows. People notice a
+// picture that lags its sound from about 0.05 s, but not one that runs up to about 0.12 s ahead (ITU-R BT.1359),
+// so every caption moves 0.12 s earlier: the late words land almost exactly, the on-time ones stay unnoticeably early.
+const LEAD = 0.12;
 
 /* ---------- hearing the words ---------- */
 
@@ -334,9 +344,10 @@ function paginate(words: Word[], maxWords: number, maxChars: number): Word[][] {
   return pages;
 }
 
-function layout(words: Word[], style: CaptionStyle, width: number, height: number, size: CaptionSize, letters: CaptionLetters): { pages: Word[][]; states: State[] } {
+function layout(heard: Word[], style: CaptionStyle, width: number, height: number, size: CaptionSize, letters: CaptionLetters, lead: number): { pages: Word[][]; states: State[] } {
+  const words = heard.map((w) => ({ ...w, start: Math.max(0, w.start - lead), end: Math.max(0, w.end - lead) }));
   const s = CAPTION_STYLES[style];
-  const u = (Math.min(width, height) / 100) * SIZE[size];
+  const u = (Math.min(width, height) / 100) * scaleOf(size);
   // Capitals are wider than small letters, so fewer of them fit on a line.
   const wide = CHAR_EM[style] * (letters === "capitals" && style !== "bold" ? 1.2 : letters !== "capitals" && style === "bold" ? 0.85 : 1);
   const perLine = Math.max(8, Math.floor(boxWidth(style, width, height) / (FONT[style] * u * wide)));
@@ -389,7 +400,7 @@ function textOn(hex: string): string {
 function pageHtml(style: CaptionStyle, o: { width: number; height: number; position: CaptionPosition; size: CaptionSize; color: string; letters: CaptionLetters; background?: string }): string {
   const { width: W, height: H } = o;
   const vertical = H > W;
-  const font = FONT[style] * (Math.min(W, H) / 100) * SIZE[o.size];
+  const font = FONT[style] * (Math.min(W, H) / 100) * scaleOf(o.size);
   const place =
     typeof o.position === "number"
       ? `top:${Math.min(96, Math.max(4, o.position))}%;transform:translate(-50%,-50%)`
@@ -479,7 +490,7 @@ async function timedWords(video: string, o: CaptionOptions): Promise<{ transcrip
 export async function previewCaptions(video: string, o: CaptionOptions): Promise<{ image: string; at: number }> {
   const info = await probe(video);
   const { words } = await timedWords(video, o);
-  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o));
+  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o), o.lead ?? LEAD);
   // A caption of a few words, about a third of the way in, mid-sentence.
   const want = (pages[0]?.[0].start ?? 0) + ((pages.at(-1)?.at(-1)?.end ?? 0) - (pages[0]?.[0].start ?? 0)) * 0.33;
   const page = pages.filter((p) => p.length >= Math.min(2, CAPTION_STYLES[o.style].maxWords)).sort((p, q) => Math.abs(p[0].start - want) - Math.abs(q[0].start - want))[0] ?? pages[0];
@@ -520,7 +531,7 @@ export interface CaptionResult {
 export async function burnCaptions(video: string, o: CaptionOptions, output: string): Promise<CaptionResult> {
   const info = await probe(video);
   const { transcript, words } = await timedWords(video, o);
-  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o));
+  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o), o.lead ?? LEAD);
   if (!states.length) throw new Error("There are no words to put on screen.");
 
   const work = mkdtempSync(join(tmpdir(), "flow-captions-"));

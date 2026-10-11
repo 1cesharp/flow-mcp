@@ -63,7 +63,16 @@ const captionFields = {
     .union([z.enum(["bottom", "middle", "top"]), z.number().min(0).max(100)])
     .default("bottom")
     .describe("bottom, middle or top - or a number for an exact height: how far down the frame the middle of the caption sits, 0 = top edge, 100 = bottom edge."),
-  size: z.enum(["small", "medium", "large"]).default("medium"),
+  size: z
+    .union([z.enum(["small", "medium", "large"]), z.number().min(40).max(250)])
+    .default("medium")
+    .describe("small, medium, large, or a percentage of the style's normal size (100 = medium, 150 = half again as big)."),
+  lead: z
+    .number()
+    .min(-0.5)
+    .max(0.5)
+    .optional()
+    .describe("Seconds the highlight runs ahead of the voice. Default 0.12; raise it if words still light up late, lower it if early."),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe("Highlight colour as #RRGGBB, for bold, highlight and reveal."),
   letters: z
     .enum(["as_said", "capitals", "lowercase"])

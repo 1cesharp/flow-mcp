@@ -469,3 +469,9 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   downloads. Tested with a local stand-in server (HOME pointed at an empty folder): first use, two callers at once
   (one download), a second download in the same panel process, and an unreachable server (clear error, no leftovers).
   The real huggingface download has not been run from this code.
+- Caption timing (2026-10-11, "words light up a bit late"): measured on the First Ascent narration against each word's
+  real onset in the sound (words after a pause): whisper's token start was 0.00 s for about half and 0.13-0.18 s LATE
+  for the rest (one outlier 0.53). AV sync tolerance is asymmetric (ITU-R BT.1359: a picture lagging its sound shows from
+  ~45 ms, one leading it goes unnoticed to ~125 ms), so every caption state now starts LEAD = 0.12 s early (`lead`
+  option, -0.5..0.5, MCP only). The .srt shifts with it (first cue 0.22 -> 0.10). Size is now a percentage too
+  (`size` small|medium|large or 40-250; the panel has a 50-180 % slider; old saved presets map to 80/100/120).

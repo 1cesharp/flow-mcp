@@ -373,7 +373,7 @@ audio{width:100%;margin-top:8px;filter:invert(1) hue-rotate(180deg)}
           <div class="capstyles" id="cap_styles"></div>
           <div class="grid2">
             <div><label class="f">Position</label><div class="seg" data-seg="cap_pos"></div></div>
-            <div><label class="f">Size</label><div class="seg" data-seg="cap_size"></div></div>
+            <div><label class="f" for="cap_size">Size <span id="cap_sizeOut" style="text-transform:none;letter-spacing:0"></span></label><input type="range" id="cap_size" min="50" max="180" step="5" value="100"></div>
           </div>
           <label class="f">Letters</label><div class="seg" data-seg="cap_letters"></div>
           <label class="f">Exact height <span id="cap_yOut" style="text-transform:none;letter-spacing:0"></span></label>
@@ -455,7 +455,7 @@ const DEFAULTS = {
   shots: { project: "MyFilm", model: "Omni 1.1 Flash", aspect: "16:9", duration: 8, resolution: "720p", variants: 1, quality: "original", max: 25, scenes: [blank()] },
   narrate: { project: "MyFilm", engine: "gemini", geminiVoice: "Charon", macVoice: "Zoe (Premium)", text: "", style: "" },
   cut: { project: "MyFilm", music: null, voiceover: null, hold: true, clips: [] },
-  captions: { video: null, style: "bold", position: "bottom", size: "medium", colors: {}, text: "" },
+  captions: { video: null, style: "bold", position: "bottom", size: 100, colors: {}, text: "" },
 };
 const S = Object.assign(structuredClone(DEFAULTS), JSON.parse(localStorage.getItem("flow-studio-v2") || "{}"));
 const save = () => localStorage.setItem("flow-studio-v2", JSON.stringify(S));
@@ -488,7 +488,6 @@ const SEGS = {
   s_quality: { get: () => S.shots.quality, set: (v) => (S.shots.quality = v), opts: ["original", "upscaled"], labels: { original: "720p", upscaled: "1080p" } },
   s_variants: { get: () => S.shots.variants, set: (v) => (S.shots.variants = +v), opts: [1, 2, 3, 4] },
   cap_pos: { get: () => (typeof S.captions.position === "string" ? S.captions.position : ""), set: (v) => { S.captions.position = v; capPreviewSoon(); }, opts: ["bottom", "middle", "top"], labels: { bottom: "Bottom", middle: "Middle", top: "Top" } },
-  cap_size: { get: () => S.captions.size, set: (v) => { S.captions.size = v; capPreviewSoon(); }, opts: ["small", "medium", "large"], labels: { small: "Small", medium: "Medium", large: "Large" } },
   cap_letters: { get: () => capLetters(S.captions.style), set: (v) => { (S.captions.letters ??= {})[S.captions.style] = v; capPreviewSoon(); }, opts: ["as_said", "capitals", "lowercase"], labels: { as_said: "Normal", capitals: "CAPS", lowercase: "lower" } },
   n_engine: { get: () => S.narrate.engine, set: (v) => (S.narrate.engine = v), opts: ["gemini", "mac"], labels: { gemini: "Google AI Studio", get mac() { return PLACE.local_engine; } } },
 };
@@ -847,8 +846,10 @@ const capColor = (style) => S.captions.colors?.[style] ?? CAP_COLORS[style]?.[0]
 // Bold pop is capitals unless the user picks otherwise; every other style keeps the words as said.
 const capLetters = (style) => S.captions.letters?.[style] ?? (style === "bold" ? "capitals" : "as_said");
 const CASE_CSS = { as_said: "none", capitals: "uppercase", lowercase: "lowercase" };
+// Size is a percentage of the style's normal size; older saved settings said small, medium or large.
+const capSize = () => (typeof S.captions.size === "number" ? S.captions.size : { small: 80, medium: 100, large: 120 }[S.captions.size] ?? 100);
 function capOpts() {
-  const c = S.captions, o = { video: c.video.path, style: c.style, position: c.position, size: c.size };
+  const c = S.captions, o = { video: c.video.path, style: c.style, position: c.position, size: capSize() };
   if (CAP_COLORS[c.style]) o.color = capColor(c.style);
   o.letters = capLetters(c.style);
   const t = $("#cap_text").value;
@@ -866,6 +867,8 @@ function renderCaptions() {
   // Presets show where they put the words on this video's shape; a number is the user's own height.
   const y = typeof c.position === "number" ? c.position : { top: capVertical ? 18 : 12, middle: 50, bottom: capVertical ? 75 : 87 }[c.position];
   $("#cap_y").value = y;
+  $("#cap_size").value = capSize();
+  $("#cap_sizeOut").textContent = `· ${capSize()}%`;
   $("#cap_yOut").textContent = typeof c.position === "number" ? `· ${y}% down` : `· ${c.position}`;
   $("#cap_go").disabled = !c.video;
 }
@@ -924,6 +927,7 @@ $("#cap_film").onclick = () => openFilms("captions");
 $("#cap_pathgo").onclick = () => { const p = $("#cap_path").value.trim().replace(/^["']|["']$/g, ""); if (!p) return; $("#cap_path").value = ""; setCapVideo({ path: p, name: p.split(/[\\/]/).pop() }); };
 const capPlace = (y) => { S.captions.position = Math.round(Math.min(95, Math.max(5, y))); save(); renderSegs(); renderCaptions(); capPreviewSoon(); };
 $("#cap_y").addEventListener("input", (e) => capPlace(+e.target.value));
+$("#cap_size").addEventListener("input", (e) => { S.captions.size = +e.target.value; save(); $("#cap_sizeOut").textContent = `· ${S.captions.size}%`; capPreviewSoon(); });
 $("#cap_preview").addEventListener("click", (e) => { const r = e.target.getBoundingClientRect(); capPlace(((e.clientY - r.top) / r.height) * 100); });
 $("#cap_preview").addEventListener("load", (e) => { const v = e.target.naturalHeight > e.target.naturalWidth; if (v !== capVertical) { capVertical = v; renderCaptions(); } });
 $("#cap_path").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#cap_pathgo").click(); });
