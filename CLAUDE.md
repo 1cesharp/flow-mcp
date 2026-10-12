@@ -261,6 +261,8 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   the picker to its All tab (it reopens on the last tab used, e.g. Characters). Verified with a real free still:
   "asset:Juno" + an uploaded file -> both attached, the generated still (not the upload) downloaded.
   Also noted: getByRole("button", { name: "Ingredient" }) also counts a hidden button outside the composer.
+- listAssets/downloadAsset now go to the project grid first: with a scene (or clip/character) view open, the scan
+  found nothing and flow_assets reported "no scenes" while one was on screen.
 - Gemini TTS: a LONG `style` note makes the model ramble - a 45-word line with a 25-word delivery note produced 674
   SECONDS of audio. The same line with no style note is 20.5 s, with a short note 32 s. Keep style notes to a few
   words, and sanity-check the returned duration against the expected one before using it.

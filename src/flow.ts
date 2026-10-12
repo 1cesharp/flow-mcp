@@ -860,6 +860,9 @@ export async function listAssets(): Promise<FlowAsset[]> {
   const state = await getFlowState();
   if (!state.signedIn || !state.inProject) throw new Error(state.hint);
   const page = await getFlowPage();
+  // From a scene, clip or character view the grid is not on screen, and the scan found nothing at all (2026-10-12:
+  // a scene open in Flow listed as "no scenes"). Go back to the project's All media first.
+  await ensureProjectGrid(page);
   const assets = await scanGrid(page);
   await scrollToTop(page);
   return assets;
@@ -870,6 +873,7 @@ export async function downloadAsset(name: string, targetStem: string, quality: D
   const state = await getFlowState();
   if (!state.signedIn || !state.inProject) throw new Error(state.hint);
   const page = await getFlowPage();
+  await ensureProjectGrid(page);
   const matches = (a: FlowAsset) => a.name.toLowerCase().startsWith(name.toLowerCase());
   const found = (await scanGrid(page, (assets) => assets.some(matches))).find(matches);
   if (!found) throw new Error(`No asset whose title starts with "${name}". Use flow_assets to list titles.`);
