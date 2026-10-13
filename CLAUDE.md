@@ -353,3 +353,10 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   message if it stays foreign. Verified: the Flow tab put into Spanish, then a free still through a test MCP ->
   switched to English, generated and downloaded (0 credits, 39 s).
 
+- COMPACT STUDIO (2026-10-13, the user found it "too big and bulky"): one density pass over the CSS, same look (stripe,
+  display font, orange tally, button styles). Floors kept on purpose: body and input text >= 16 px (iOS zooms into
+  smaller inputs; the global mobile-first rule), buttons and segments >= 38-46 px tall. Title on one line, 12 px
+  stripe, inputs 17 px with 10 px padding, labels 13 px, cards 14 px padding, headings 30 px, Roll bar 56 px. Pages
+  are 23-35% shorter on a phone. It also fixed a sideways scroll: at 390 px wide the old page was 427 px (checked with
+  a headless shot); every tab now fits at 375 px. Re-check with full-page headless shots per tab at 390 and 1440 wide
+  and an overflow scan (elements whose right edge passes the viewport, tabs row excluded).

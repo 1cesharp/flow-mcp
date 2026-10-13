@@ -13,140 +13,140 @@
   --ink:#14110e; --ink2:#1d1915; --ink3:#2a241e; --line:#3a322a;
   --bone:#f3eadb; --dim:#b3a793; --tally:#ff5a1f; --go:#9fe06a; --warn:#ffc53d; --bad:#ff4d4d;
   --display:"Big Shoulders Display",Impact,sans-serif; --body:"Hanken Grotesk",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
-  --r:14px;
+  --r:12px;
 }
 *{box-sizing:border-box;margin:0}
-html{background:var(--ink);color:var(--bone);font:500 19px/1.45 var(--body);-webkit-text-size-adjust:100%}
-body{min-height:100vh;padding:0 16px 140px;background:
+html{background:var(--ink);color:var(--bone);font:500 17px/1.4 var(--body);-webkit-text-size-adjust:100%}
+body{min-height:100vh;padding:0 16px 104px;background:
   radial-gradient(1200px 500px at 85% -10%,rgba(255,90,31,.16),transparent 60%),
   radial-gradient(900px 600px at -10% 30%,rgba(255,197,61,.06),transparent 60%),var(--ink)}
 body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.07;z-index:50;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E")}
 .wrap{max-width:1240px;margin:0 auto}
-.clapper{height:26px;margin:0 -16px;background:repeating-linear-gradient(-55deg,var(--bone) 0 34px,var(--ink) 34px 68px)}
-header{display:flex;flex-wrap:wrap;gap:14px 24px;align-items:end;justify-content:space-between;padding:26px 0 22px;border-bottom:2px solid var(--line)}
-h1{font:900 clamp(54px,13vw,104px)/.86 var(--display);letter-spacing:.01em;text-transform:uppercase}
+.clapper{height:12px;margin:0 -16px;background:repeating-linear-gradient(-55deg,var(--bone) 0 22px,var(--ink) 22px 44px)}
+header{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;justify-content:space-between;padding:12px 0 10px}
+h1{font:900 clamp(34px,8.5vw,52px)/.9 var(--display);letter-spacing:.01em;text-transform:uppercase}
 h1 span{color:var(--tally)}
-.status{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font:700 17px var(--mono)}
-.pill{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border:2px solid var(--line);border-radius:99px;background:var(--ink2)}
-.tally{width:14px;height:14px;border-radius:50%;background:var(--dim)}
+.status{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font:700 15px var(--mono)}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:2px solid var(--line);border-radius:99px;background:var(--ink2)}
+.tally{width:12px;height:12px;border-radius:50%;background:var(--dim)}
 .tally.ready{background:var(--go);box-shadow:0 0 14px var(--go)}
 .tally.rolling{background:var(--tally);box-shadow:0 0 16px var(--tally);animation:blink 1s steps(2) infinite}
 .tally.down{background:var(--bad)}
 @keyframes blink{50%{opacity:.25}}
-.hint{margin-top:18px;padding:18px 20px;border-left:6px solid var(--warn);background:var(--ink2);border-radius:var(--r);font-size:20px}
-.cols{display:grid;gap:34px;margin-top:30px}
+.hint{margin-top:12px;padding:12px 14px;border-left:5px solid var(--warn);background:var(--ink2);border-radius:var(--r);font-size:17px}
+.cols{display:grid;gap:22px;margin-top:16px}
 @media(min-width:1040px){.cols{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start}.side{position:sticky;top:18px;max-height:calc(100vh - 36px);overflow-y:auto;overscroll-behavior:contain;padding-right:4px}}
-h2{font:800 40px/1 var(--display);text-transform:uppercase;letter-spacing:.03em;margin:0 0 16px;display:flex;align-items:baseline;gap:12px}
-h2 small{font:700 16px var(--mono);color:var(--dim);letter-spacing:0}
-section{margin-bottom:38px}
-.card{background:var(--ink2);border:2px solid var(--line);border-radius:var(--r);padding:20px;animation:rise .45s both}
+h2{font:800 30px/1 var(--display);text-transform:uppercase;letter-spacing:.03em;margin:0 0 10px;display:flex;align-items:baseline;gap:10px}
+h2 small{font:700 14px var(--mono);color:var(--dim);letter-spacing:0}
+section{margin-bottom:24px}
+.card{background:var(--ink2);border:2px solid var(--line);border-radius:var(--r);padding:14px;animation:rise .45s both}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}}
-label.f{display:block;font:700 15px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 8px}
+label.f{display:block;font:700 13px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin:12px 0 5px}
 label.f:first-child{margin-top:0}
-input[type=text],input[type=number],select,textarea{width:100%;font:500 20px var(--body);color:var(--bone);background:var(--ink);border:2px solid var(--line);border-radius:12px;padding:15px 16px;outline:none;-webkit-appearance:none;appearance:none}
-select{background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);background-position:calc(100% - 24px) 50%,calc(100% - 16px) 50%;background-size:8px 8px;background-repeat:no-repeat;padding-right:46px}
-textarea{min-height:150px;resize:vertical;line-height:1.4}
+input[type=text],input[type=number],select,textarea{width:100%;font:500 17px var(--body);color:var(--bone);background:var(--ink);border:2px solid var(--line);border-radius:10px;padding:10px 12px;outline:none;-webkit-appearance:none;appearance:none}
+select{background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);background-position:calc(100% - 20px) 50%,calc(100% - 13px) 50%;background-size:7px 7px;background-repeat:no-repeat;padding-right:38px}
+textarea{min-height:96px;resize:vertical;line-height:1.4}
 input:focus,select:focus,textarea:focus{border-color:var(--tally)}
-.seg{display:flex;flex-wrap:wrap;gap:8px}
-.seg button{flex:1 1 0;min-width:0;min-height:54px;padding:0 16px;font:700 19px var(--mono);color:var(--bone);background:var(--ink);border:2px solid var(--line);border-radius:12px;cursor:pointer}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{flex:1 1 0;min-width:0;min-height:42px;padding:0 10px;font:700 16px var(--mono);color:var(--bone);background:var(--ink);border:2px solid var(--line);border-radius:10px;cursor:pointer}
 .seg button.on{background:var(--bone);color:var(--ink);border-color:var(--bone)}
 .seg button:disabled{opacity:.3;cursor:not-allowed}
-.grid2{display:grid;gap:0 18px}
-.grid2 label.f:first-child{margin-top:18px}
+.grid2{display:grid;gap:0 12px}
+.grid2 label.f:first-child{margin-top:12px}
 @media(min-width:620px){.grid2{grid-template-columns:1fr 1fr}}
-.scene{position:relative;margin-bottom:18px;padding-top:24px}
-.scene .no{position:absolute;top:-2px;right:18px;font:900 92px/1 var(--display);color:var(--ink3);pointer-events:none;-webkit-text-stroke:2px var(--line)}
-.scene>label.f:first-of-type{padding-right:120px}
-.scene .bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
-.btn{min-height:56px;padding:0 22px;font:800 22px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--bone);background:var(--ink3);border:2px solid var(--line);border-radius:12px;cursor:pointer}
+.scene{position:relative;margin-bottom:12px;padding-top:12px}
+.scene .no{position:absolute;top:-2px;right:14px;font:900 60px/1 var(--display);color:var(--ink3);pointer-events:none;-webkit-text-stroke:2px var(--line)}
+.scene>label.f:first-of-type{padding-right:80px}
+.scene .bar{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+.btn{min-height:46px;padding:0 16px;font:800 19px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--bone);background:var(--ink3);border:2px solid var(--line);border-radius:10px;cursor:pointer}
 .btn:hover{border-color:var(--bone)}
 .btn.ghost{background:transparent}
-.btn.small{min-height:48px;font-size:19px;padding:0 16px}
+.btn.small{min-height:40px;font-size:17px;padding:0 12px}
 .btn:disabled{opacity:.35;cursor:not-allowed}
-.phrase{margin-top:10px;padding:14px 16px;border-radius:12px;background:var(--ink);border:2px dashed var(--line);color:var(--dim);font-size:18px}
+.phrase{margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--ink);border:2px dashed var(--line);color:var(--dim);font-size:16px}
 .phrase b{color:var(--warn);font-weight:700}
-.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
-.slot{position:relative;min-height:128px;border:2px dashed var(--line);border-radius:12px;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:10px;text-align:center;cursor:pointer;font:700 16px var(--mono);color:var(--dim);overflow:hidden}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.slot{position:relative;min-height:92px;border:2px dashed var(--line);border-radius:10px;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:8px;text-align:center;cursor:pointer;font:700 15px var(--mono);color:var(--dim);overflow:hidden}
 .slot:hover{border-color:var(--tally);color:var(--bone)}
 .slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.75}
 .slot .tag{position:relative;background:rgba(20,17,14,.85);padding:4px 10px;border-radius:8px;color:var(--bone);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .slot .two{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
-.slot .two button{min-height:44px;padding:0 12px;font:700 15px var(--mono);color:var(--bone);background:var(--ink3);border:2px solid var(--line);border-radius:10px;cursor:pointer}
+.slot .two button{min-height:38px;padding:0 10px;font:700 14px var(--mono);color:var(--bone);background:var(--ink3);border:2px solid var(--line);border-radius:10px;cursor:pointer}
 .slot .two button:hover{border-color:var(--tally)}
-.cliplist{display:flex;flex-direction:column;gap:8px}
-.take{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.cliplist{display:flex;flex-direction:column;gap:6px}
+.take{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .take:last-child{border-bottom:0}
 .take b{font:700 15px var(--mono);color:var(--bone);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .take small{display:block;font:600 13px var(--mono);color:var(--dim);margin-top:2px}
 .take audio{grid-column:1/-1;width:100%;max-width:100%}
-.cliprow{display:flex;align-items:center;gap:12px;min-height:52px;padding:6px 8px 6px 14px;border:2px solid var(--line);border-radius:12px;background:var(--ink)}
-.cliprow b{font:800 18px var(--mono);color:var(--tally);min-width:1.5em}
+.cliprow{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 6px 4px 12px;border:2px solid var(--line);border-radius:10px;background:var(--ink)}
+.cliprow b{font:800 16px var(--mono);color:var(--tally);min-width:1.5em}
 .cliprow span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:700 15px var(--mono);color:var(--bone)}
-.cliprow button{flex:none;width:40px;height:40px;border-radius:50%;border:0;background:var(--bad);color:#fff;font:800 20px var(--body);cursor:pointer}
-.slot .x{position:absolute;top:6px;right:6px;width:36px;height:36px;border-radius:50%;border:0;background:var(--bad);color:#fff;font:800 20px var(--body);cursor:pointer;z-index:2}
-.check{display:flex;align-items:center;gap:14px;margin-top:18px;font-size:20px;cursor:pointer}
-.check input{width:30px;height:30px;accent-color:var(--tally)}
-.add{width:100%;min-height:72px;border-style:dashed;font-size:26px}
-.rollbar{position:fixed;left:0;right:0;bottom:0;z-index:40;padding:14px 16px calc(14px + env(safe-area-inset-bottom));background:var(--ink);border-top:2px solid var(--line)}
-.rollbar .in{max-width:1240px;margin:0 auto;display:flex;gap:14px;align-items:center}
-.est{flex:1;min-width:0;font:700 17px var(--mono);color:var(--dim)}
-.est b{display:block;font:900 38px/1 var(--display);color:var(--bone);letter-spacing:.03em}
-.roll{min-height:76px;padding:0 38px;font:900 38px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--tally);border:0;border-radius:16px;cursor:pointer;box-shadow:0 10px 40px rgba(255,90,31,.35)}
+.cliprow button{flex:none;width:34px;height:34px;border-radius:50%;border:0;background:var(--bad);color:#fff;font:800 20px var(--body);cursor:pointer}
+.slot .x{position:absolute;top:5px;right:5px;width:32px;height:32px;border-radius:50%;border:0;background:var(--bad);color:#fff;font:800 20px var(--body);cursor:pointer;z-index:2}
+.check{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:17px;cursor:pointer}
+.check input{width:24px;height:24px;flex:none;accent-color:var(--tally)}
+.add{width:100%;min-height:50px;border-style:dashed;font-size:21px}
+.rollbar{position:fixed;left:0;right:0;bottom:0;z-index:40;padding:8px 16px calc(8px + env(safe-area-inset-bottom));background:var(--ink);border-top:2px solid var(--line)}
+.rollbar .in{max-width:1240px;margin:0 auto;display:flex;gap:12px;align-items:center}
+.est{flex:1;min-width:0;font:700 15px var(--mono);color:var(--dim)}
+.est b{display:block;font:900 28px/1 var(--display);color:var(--bone);letter-spacing:.03em}
+.roll{min-height:56px;padding:0 30px;font:900 30px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--tally);border:0;border-radius:12px;cursor:pointer;box-shadow:0 8px 30px rgba(255,90,31,.35)}
 .roll:active{transform:translateY(2px)}
 .roll:disabled{background:var(--ink3);color:var(--dim);box-shadow:none;cursor:not-allowed}
-.job{display:grid;gap:12px;padding:16px 0;border-top:2px solid var(--line)}
+.job{display:grid;gap:8px;padding:12px 0;border-top:2px solid var(--line)}
 .job:first-child{border-top:0;padding-top:0}
-.job .top{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.badge{font:700 15px var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:6px 12px;border-radius:8px;background:var(--ink3)}
+.job .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.badge{font:700 14px var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:4px 10px;border-radius:8px;background:var(--ink3)}
 .badge.running{background:var(--tally);color:var(--ink)} .badge.done{background:var(--go);color:var(--ink)} .badge.failed{background:var(--bad);color:#fff} .badge.cancelled{opacity:.5}
-.job .name{font:800 26px var(--display);letter-spacing:.04em;text-transform:uppercase}
-.job p{color:var(--dim);font-size:18px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.job .name{font:800 21px var(--display);letter-spacing:.04em;text-transform:uppercase}
+.job p{color:var(--dim);font-size:16px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .job .err{color:var(--bad);-webkit-line-clamp:4}
 .job video,.job img.out{width:100%;max-height:420px;object-fit:contain;border-radius:12px;background:#000}
-.meter{height:10px;border-radius:9px;background:var(--ink3);overflow:hidden}.meter i{display:block;height:100%;background:var(--tally);transition:width .6s}
-.pacing{font:700 17px var(--mono);color:var(--warn);margin-bottom:14px}
-.empty{color:var(--dim);font-size:19px}
-.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
-.gal figure{margin:0;border-radius:12px;overflow:hidden;background:#000;border:2px solid var(--line);cursor:pointer}
+.meter{height:8px;border-radius:9px;background:var(--ink3);overflow:hidden}.meter i{display:block;height:100%;background:var(--tally);transition:width .6s}
+.pacing{font:700 15px var(--mono);color:var(--warn);margin-bottom:10px}
+.empty{color:var(--dim);font-size:16px}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
+.gal figure{margin:0;border-radius:10px;overflow:hidden;background:#000;border:2px solid var(--line);cursor:pointer}
 .gal figure:hover{border-color:var(--tally)}
 .gal video,.gal img{display:block;width:100%;aspect-ratio:1;object-fit:cover}
-.gal figcaption{padding:8px 10px;font:700 14px var(--mono);color:var(--bone);background:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gal figcaption{padding:6px 8px;font:700 13px var(--mono);color:var(--bone);background:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #viewer video,#viewer img{width:100%;max-height:74vh;object-fit:contain;border-radius:12px;background:#000}
-.lib{display:grid;gap:8px;max-height:420px;overflow:auto;margin-top:14px}
-.lib button{display:flex;gap:12px;align-items:center;justify-content:space-between;text-align:left;min-height:56px;padding:10px 16px;font:500 19px var(--body);color:var(--bone);background:var(--ink);border:2px solid var(--line);border-radius:12px;cursor:pointer}
+.lib{display:grid;gap:6px;max-height:420px;overflow:auto;margin-top:10px}
+.lib button{display:flex;gap:10px;align-items:center;justify-content:space-between;text-align:left;min-height:44px;padding:8px 12px;font:500 17px var(--body);color:var(--bone);background:var(--ink);border:2px solid var(--line);border-radius:10px;cursor:pointer}
 .lib button:hover{border-color:var(--tally)} .lib button.on{border-color:var(--go)}
 .lib em{font:700 14px var(--mono);font-style:normal;color:var(--dim);text-transform:uppercase}
-dialog{width:min(640px,calc(100vw - 24px));max-height:86vh;border:2px solid var(--line);border-radius:18px;background:var(--ink2);color:var(--bone);padding:22px}
+dialog{width:min(640px,calc(100vw - 24px));max-height:86vh;border:2px solid var(--line);border-radius:14px;background:var(--ink2);color:var(--bone);padding:16px}
 dialog::backdrop{background:rgba(0,0,0,.7)}
-.toast{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);z-index:60;max-width:calc(100vw - 32px);padding:16px 22px;border-radius:12px;background:var(--bone);color:var(--ink);font-weight:700;font-size:19px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:60;max-width:calc(100vw - 32px);padding:12px 18px;border-radius:10px;background:var(--bone);color:var(--ink);font-weight:700;font-size:17px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .toast.bad{background:var(--bad);color:#fff}
-input[type=range]{width:100%;accent-color:var(--tally);height:36px}
+input[type=range]{width:100%;accent-color:var(--tally);height:30px}
 </style>
 <style>
-.tabs{position:sticky;top:0;z-index:30;display:flex;gap:8px;overflow-x:auto;padding:12px 0;margin:0 -16px;padding-left:16px;padding-right:16px;background:var(--ink);border-bottom:2px solid var(--line);-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs{position:sticky;top:0;z-index:30;display:flex;gap:6px;overflow-x:auto;padding:8px 0;margin:0 -16px;padding-left:16px;padding-right:16px;background:var(--ink);border-bottom:2px solid var(--line);-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tabs button{flex:0 0 auto;min-height:56px;padding:0 20px;font:800 22px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);background:var(--ink2);border:2px solid var(--line);border-radius:12px;cursor:pointer;white-space:nowrap}
+.tabs button{flex:0 0 auto;min-height:46px;padding:2px 14px;font:800 19px/1.05 var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);background:var(--ink2);border:2px solid var(--line);border-radius:10px;cursor:pointer;white-space:nowrap}
 .tabs button.on{background:var(--tally);border-color:var(--tally);color:var(--ink)}
 .tabs button small{display:block;font:700 12px var(--mono);letter-spacing:0;text-transform:none;opacity:.8}
 .panel{display:none;animation:rise .35s both}
 .panel.on{display:block}
-.step{font:700 14px var(--mono);color:var(--tally);letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px}
-.lede{color:var(--dim);font-size:19px;margin:0 0 18px;max-width:70ch}
-.rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
-audio{width:100%;margin-top:12px;filter:invert(1) hue-rotate(180deg)}
-.cast-card{display:flex;gap:14px;align-items:center;padding:12px;border:2px solid var(--line);border-radius:12px;background:var(--ink);margin-bottom:10px}
-.cast-card img{width:64px;height:64px;object-fit:cover;border-radius:10px;background:#fff;flex:0 0 auto}
-.cast-card b{display:block;font:800 24px var(--display);letter-spacing:.04em}
+.step{font:700 13px var(--mono);color:var(--tally);letter-spacing:.14em;text-transform:uppercase;margin-bottom:3px}
+.lede{color:var(--dim);font-size:16px;margin:0 0 12px;max-width:70ch}
+.rowbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+audio{width:100%;margin-top:8px;filter:invert(1) hue-rotate(180deg)}
+.cast-card{display:flex;gap:12px;align-items:center;padding:8px;border:2px solid var(--line);border-radius:10px;background:var(--ink);margin-bottom:8px}
+.cast-card img{width:52px;height:52px;object-fit:cover;border-radius:10px;background:#fff;flex:0 0 auto}
+.cast-card b{display:block;font:800 20px var(--display);letter-spacing:.04em}
 .cast-card .grow{flex:1;min-width:0}
-.pickrow{display:grid;gap:10px}
+.pickrow{display:grid;gap:8px}
 @media(min-width:760px){.pickrow{grid-template-columns:1fr 1fr}}
 </style></head>
 <body>
 <div class="clapper"></div>
 <div class="wrap">
   <header>
-    <h1>Flow<br><span>Studio</span></h1>
+    <h1>Flow <span>Studio</span></h1>
     <div class="status" id="status"><span class="pill"><i class="tally"></i>Connecting…</span></div>
   </header>
   <div id="offline"></div>
@@ -173,7 +173,7 @@ audio{width:100%;margin-top:12px;filter:invert(1) hue-rotate(180deg)}
           <div id="castList"></div>
           <label class="f">Name</label><input type="text" id="castName" placeholder="Sticky">
           <label class="f">What they look like</label>
-          <textarea id="castLook" style="min-height:120px" placeholder="A cartoonish stick figure: thin black outline limbs, oversized round white head, big eyes, mustard beanie, red scarf, white gloves, grey shoes, flat vector style, white background"></textarea>
+          <textarea id="castLook" style="min-height:100px" placeholder="A cartoonish stick figure: thin black outline limbs, oversized round white head, big eyes, mustard beanie, red scarf, white gloves, grey shoes, flat vector style, white background"></textarea>
           <p class="empty" style="margin-top:8px">Or attach a picture instead of describing them:</p>
           <div class="slots" style="margin-top:10px"><div class="slot" data-slot="cast" data-i="0"></div></div>
           <div class="grid2">
@@ -199,12 +199,12 @@ audio{width:100%;margin-top:12px;filter:invert(1) hue-rotate(180deg)}
           <label class="f">Engine</label><div class="seg" data-seg="f_engine"></div>
           <div class="phrase" id="f_engineNote"></div>
         </div>
-        <h2 style="margin-top:28px">Frames <small id="f_count"></small></h2>
+        <h2 style="margin-top:18px">Frames <small id="f_count"></small></h2>
         <div id="f_scenes"></div>
         <button class="btn ghost add" data-add="frames">+ Add frame</button>
-        <div class="card" style="margin-top:18px">
+        <div class="card" style="margin-top:12px">
           <label class="f">Paste a script to make frames from</label>
-          <textarea id="f_script" style="min-height:120px" placeholder="One frame per paragraph, or numbered: 1. ... 2. ..."></textarea>
+          <textarea id="f_script" style="min-height:100px" placeholder="One frame per paragraph, or numbered: 1. ... 2. ..."></textarea>
           <div class="rowbtns"><button class="btn small" data-split="frames-replace">Replace frames</button><button class="btn small ghost" data-split="frames-append">Append</button></div>
         </div>
       </section>
@@ -230,11 +230,11 @@ audio{width:100%;margin-top:12px;filter:invert(1) hue-rotate(180deg)}
             <div><label class="f">Max credits per shot</label><input type="number" id="s_max" min="0" value="25"></div>
           </div>
         </div>
-        <h2 style="margin-top:28px">Shots <small id="s_count"></small></h2>
+        <h2 style="margin-top:18px">Shots <small id="s_count"></small></h2>
         <div id="s_scenes"></div>
         <button class="btn ghost add" data-add="shots">+ Add shot</button>
 
-        <h2 style="margin-top:28px">Carry on from a clip you already made</h2>
+        <h2 style="margin-top:18px">Carry on from a clip you already made</h2>
         <p class="lede">Picks up on the real last frame of a finished clip, so the two play as one unbroken take with no visible cut. Flow makes you choose one of two things: an <b>exact</b> join, where the person's look comes from that frame itself, or a <b>locked character</b>, where the face stays put but the opening frame is only close. It cannot do both at once.</p>
         <div class="card">
           <label class="f">Project folder for the new clip</label><input type="text" id="k_project" placeholder="MyFilm">
@@ -262,7 +262,7 @@ audio{width:100%;margin-top:12px;filter:invert(1) hue-rotate(180deg)}
         <p class="lede">Record narration for free, at any length. <b>Google AI Studio</b> gives you the same voices Flow uses and takes a delivery note; <b data-place="local_engine">macOS voice</b> speaks with a voice installed on <span data-place="computer">this Mac</span> and needs no key. Neither spends credits.</p>
         <div class="card">
           <label class="f">Project folder</label><input type="text" id="n_project" placeholder="MyFilm">
-          <label class="f">Line to speak</label><textarea id="n_text" style="min-height:120px" placeholder="Sometimes the obstacles in your life aren't there to block you…"></textarea>
+          <label class="f">Line to speak</label><textarea id="n_text" style="min-height:100px" placeholder="Sometimes the obstacles in your life aren't there to block you…"></textarea>
           <label class="f">Voice engine</label><div class="seg" data-seg="n_engine"></div>
           <div class="phrase" id="n_engineNote"></div>
           <div id="n_keyWrap">
@@ -278,7 +278,7 @@ audio{width:100%;margin-top:12px;filter:invert(1) hue-rotate(180deg)}
           <div class="rowbtns"><button class="btn" id="n_go">Record take</button></div>
           <div id="n_out" style="margin-top:16px"></div>
         </div>
-        <h2 style="margin-top:28px">Your narrations <small>saved on <span data-place="computer">this Mac</span></small></h2>
+        <h2 style="margin-top:18px">Your narrations <small>saved on <span data-place="computer">this Mac</span></small></h2>
         <div class="card"><div id="n_takes"><p class="empty">No narrations saved yet.</p></div></div>
       </section>
 
