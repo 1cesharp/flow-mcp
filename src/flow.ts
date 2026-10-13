@@ -2,7 +2,7 @@ import { closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, 
 import { homedir, tmpdir } from "node:os";
 import { basename, extname, join } from "node:path";
 import type { Locator, Page } from "playwright-core";
-import { HOME_DIR, getFlowPage } from "./chrome.js";
+import { HOME_DIR, getFlowPage, inEnglish } from "./chrome.js";
 import type { Job } from "./queue.js";
 import { extractZip } from "./platform.js";
 
@@ -608,8 +608,9 @@ async function downloadTile(page: Page, target: Locator | TileResolver, targetSt
 async function ensureProjectGrid(page: Page): Promise<void> {
   await dismissOverlays(page);
   const root = page.url().match(/^https:\/\/[^/]+\/project\/[0-9a-f-]{36}/)?.[0];
-  if (root && page.url() !== root) {
-    await page.goto(root, { waitUntil: "domcontentloaded" });
+  // Compared by path: an address ending in ?hl=en is already the grid.
+  if (root && new URL(page.url()).pathname !== new URL(root).pathname) {
+    await page.goto(inEnglish(root), { waitUntil: "domcontentloaded" });
     await pause(page, 2500);
   }
   await page.getByRole("navigation", { name: "Project navigation" }).getByText("All media", { exact: true }).click().catch(() => {});
@@ -1039,7 +1040,7 @@ export async function createCharacter(c: CharacterParams, job?: Job): Promise<{ 
 
   // Flow labels this "Done editing" or just "Done" depending on the panel state.
   await page.getByRole("button", { name: /^Done( editing)?$/ }).first().click();
-  await page.waitForURL((u) => !/\/character/.test(u.pathname), { timeout: 15_000 }).catch(() => page.goto(projectUrl));
+  await page.waitForURL((u) => !/\/character/.test(u.pathname), { timeout: 15_000 }).catch(() => page.goto(inEnglish(projectUrl)));
   await pause(page, 1000);
   // Flow drops the new character into the composer; leave the composer empty for the next job.
   const clear = page.getByRole("button", { name: "Clear prompt" });

@@ -343,3 +343,13 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   FLOW_MCP_PORT=8799 and FLOW_MCP_HOME=<scratch dir>. Never reuse the real home for that: a process that owns a port
   writes a fresh token to HOME/token, which locks every client of the real owner out (401). Symlink characters.json into
   the scratch home when looks must persist. Give the client a 60 s request timeout so the app's limit is reproduced.
+- FLOW IN ENGLISH (2026-10-13): every driver step finds a button by its ENGLISH accessible name (~45 labels), so a
+  Google account set to another language made the whole MCP fail. Measured on a spare tab: `?hl=es` turned every label
+  Spanish ("Inicio", "Menú para añadir contenido multimedia") on an English account, the choice holds through in-app
+  navigation (grid -> /edit/ -> back), a plain reload drops it, and a Spanish Accept-Language changes nothing (the
+  account's language wins over the browser's). So `?hl=en` overrides the account: launchChrome and getFlowPage load
+  `inEnglish(url)`, ensureProjectGrid compares paths (an address ending ?hl=en is already the grid) and reloads with
+  hl=en, and getFlowPage calls ensureEnglish, which reloads a non-English Flow page (`<html lang>`) and throws a clear
+  message if it stays foreign. Verified: the Flow tab put into Spanish, then a free still through a test MCP ->
+  switched to English, generated and downloaded (0 credits, 39 s).
+
