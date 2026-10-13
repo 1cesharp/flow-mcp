@@ -296,6 +296,18 @@ server.registerTool(
 );
 
 server.registerTool(
+  "flow_transcribe",
+  {
+    title: "Hear the words in a video or audio file",
+    description:
+      "Transcribe a video or audio file on this computer with every word's start and end time (whisper.cpp, local and free; the first call downloads a 148 MB speech model once). Use the times to check a take said the right words and to cut lines out of it for flow_assemble's voice_lines.",
+    inputSchema: shapes.transcribe,
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  (args) => reply(patient("flow_transcribe", core.transcribe(args))),
+);
+
+server.registerTool(
   "flow_captions",
   {
     title: "Add captions to a video",

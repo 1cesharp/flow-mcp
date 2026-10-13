@@ -56,7 +56,7 @@ Mac is the tested platform. Windows support is new and hasn't been tried on a re
 
 ---
 
-## The toolkit: 19 tools
+## The toolkit: 20 tools
 
 ### Getting set up
 
@@ -107,7 +107,8 @@ This is a limit in Flow itself, not something we can program around. The exact j
 | **Voiceover Recorder** | Narration for free, at any length. Either Google AI Studio's text-to-speech (the same voices Flow has, and you can tell it *how* to read the line; keep that note short) or a voice already on your computer (macOS voices on a Mac, Windows' own voices on a PC) |
 | **Voice List** | Every narrator available to you |
 | **Captions** | Puts the spoken words on screen, the way short-form videos do, on wide or vertical videos. Your computer listens to the video with whisper.cpp, a free speech-to-text program, and times every word itself; nothing is uploaded. Five styles: big capitals where the word being said lights up, a coloured block behind the word being said, words appearing as they're said, classic subtitles, and white words on a dark band. Each can use normal letters, ALL CAPITALS or all lowercase. Also writes a subtitle file for YouTube |
-| **Film Cutter** | Joins clips into one film using FFmpeg, a free video toolkit: the clips you made, or any video you pick, in the order you choose. Lays the narration on top, adds a looping music bed, and lets you turn the clips' own sound down so it doesn't drown out the voice. Sizes everything to match your best clip, and can hold the last frame if the voice runs longer than the footage |
+| **Word Finder** | Listens to any video or audio on your computer and writes down every word with the moment it is said. Free, nothing uploaded. Used to check a voice take said the right words, and to cut it into lines |
+| **Film Cutter** | Joins clips into one film using FFmpeg, a free video toolkit: the clips you made, or any video you pick, in the order you choose. Lays the narration on top, adds a looping music bed, and lets you turn the clips' own sound down so it doesn't drown out the voice. Sizes everything to match your best clip, and can hold the last frame if the voice runs longer than the footage. A narration can also be placed line by line, so each sentence lands exactly when its title appears |
 
 ---
 

@@ -165,7 +165,7 @@ function downloadSpeechModel(): Promise<string> {
   return fetching;
 }
 
-async function probe(file: string): Promise<{ width: number; height: number; duration: number; audio?: string }> {
+async function probe(file: string, needPicture = true): Promise<{ width: number; height: number; duration: number; audio?: string }> {
   if (!existsSync(file)) throw new Error(`No video at ${file}.`);
   const { stdout } = await run(
     FFPROBE,
@@ -180,6 +180,7 @@ async function probe(file: string): Promise<{ width: number; height: number; dur
     format: { duration?: string };
   };
   const v = data.streams.find((s) => s.codec_type === "video");
+  if (!needPicture && !v) return { width: 0, height: 0, duration: Number(data.format.duration ?? 0), audio: data.streams.find((s) => s.codec_type === "audio")?.codec_name };
   if (!v?.width || !v.height) throw new Error(`"${basename(file)}" has no picture to put captions on.`);
   // Phone videos are often stored sideways with a rotation flag; ffmpeg turns them upright, so measure them upright.
   const rotation = Math.abs(Number(v.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? v.tags?.rotate ?? 0)) % 180;
@@ -209,7 +210,7 @@ function wordsFromTokens(json: { transcription: { tokens?: { text: string; offse
 }
 
 export async function transcribe(video: string, language = "auto"): Promise<Transcript> {
-  const info = await probe(video);
+  const info = await probe(video, false);
   if (!info.audio) throw new Error(`"${basename(video)}" has no sound, so there are no words to caption.`);
   let model: string;
   try {
@@ -235,6 +236,8 @@ export async function transcribe(video: string, language = "auto"): Promise<Tran
       if (err.code === "ENOENT") throw new Error(`Captions need whisper.cpp to hear the words. Install it: ${WHISPER_HINT}.`);
       throw new Error(`whisper.cpp could not read the sound: ${String(err.stderr ?? err.message).trim().split("\n").at(-1)}`);
     });
+    // whisper-cli exits 0 even when it cannot read the audio, and simply writes nothing.
+    if (!existsSync(join(work, "words.json"))) throw new Error(`whisper.cpp could not read the sound in "${basename(video)}".`);
     const json = JSON.parse(readFileSync(join(work, "words.json"), "utf8")) as Parameters<typeof wordsFromTokens>[0] & { result?: { language?: string } };
     const words = wordsFromTokens(json);
     if (!words.length) throw new Error(`No speech was heard in "${basename(video)}".`);

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
-import { assemble, localVoices, speakLocally } from "./assemble.js";
+import { assemble, localVoices, speakLocally, voiceTrack } from "./assemble.js";
 import { GEMINI_VOICES, geminiKey, saveGeminiKey, speakWithGemini } from "./gemini.js";
 import { extractLastFrame } from "./chain.js";
 import { burnCaptions, captionedName, captionSetup, previewCaptions, transcribe } from "./captions.js";
@@ -112,10 +112,29 @@ export const shapes = {
       .default(1)
       .describe("Volume of the clips' own sound, 0-1. Lower it (around 0.2-0.3) so a narration sits clearly on top; 1 keeps it as recorded."),
     voiceover: z.string().optional().describe("Absolute path to a voiceover audio file, starts at 0:00."),
+    voice_lines: z
+      .array(
+        z.object({
+          file: z.string().min(1).describe("Take to cut the line from: audio or video (its sound is used)."),
+          from: z.number().min(0).optional().describe("Start of the line within the take, seconds (from flow_transcribe word times)."),
+          to: z.number().min(0).optional().describe("End of the line within the take, seconds."),
+          at: z.number().min(0).describe("Where the line starts in the film, seconds."),
+          max_seconds: z.number().min(0.2).optional().describe("Longest it may last; a longer line is sped up slightly (at most 1.25x)."),
+        }),
+      )
+      .max(60)
+      .optional()
+      .describe(
+        "A timed voiceover built from separate lines, each placed at its own moment in the film - for example lines cut from several Flow takes in your avatar's voice, each landing on the title it describes. Replaces `voiceover`.",
+      ),
     output_name: z.string().default("final"),
     hold_last_frame: z.boolean().default(true).describe("Freeze the final frame so a longer voiceover is not cut off."),
   },
-  transcribe: { video: z.string().min(1), language: z.string().default("auto") },
+  transcribe: {
+    video: z.string().min(1).describe("Absolute path of a video or audio file on this computer."),
+    language: z.string().default("auto"),
+    words: z.boolean().default(true).describe("Include every word with its start and end time in seconds."),
+  },
   caption_preview: captionFields,
   captions: {
     ...captionFields,
@@ -429,14 +448,25 @@ export class LocalCore implements Core {
     return { dir, files };
   }
 
-  async assemble({ project, ...rest }: Args<"assemble">) {
-    return assemble({ dir: projectDir(project), ...rest });
+  async assemble({ project, voice_lines, ...rest }: Args<"assemble">) {
+    const dir = projectDir(project);
+    if (!voice_lines?.length) return assemble({ dir, ...rest });
+    mkdirSync(dir, { recursive: true });
+    const track = await voiceTrack(voice_lines, join(dir, `${rest.output_name.replace(/[^\w.-]+/g, "_")}-voice.wav`));
+    const film = await assemble({ dir, ...rest, voiceover: track.file });
+    return { ...film, voice: track };
   }
 
   // Captions never touch Flow or its queue: whisper.cpp hears the words, a headless Chrome of its own draws them.
-  async transcribe({ video, language }: Args<"transcribe">) {
+  async transcribe({ video, language, words }: Args<"transcribe">) {
     const t = await transcribe(video, language);
-    return { text: t.text, words: t.words.length, language: t.language, model: t.model };
+    return {
+      text: t.text,
+      word_count: t.words.length,
+      language: t.language,
+      model: t.model,
+      ...(words ? { words: t.words.map((w) => ({ text: w.text, start: Number(w.start.toFixed(2)), end: Number(w.end.toFixed(2)) })) } : {}),
+    };
   }
 
   async caption_preview(a: Args<"caption_preview">) {

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 
@@ -122,6 +123,80 @@ export async function speakLocally(text: string, voice: string, target: string):
   rmSync(raw, { force: true });
   const { stdout } = await run(FFPROBE, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", target]);
   return { output: target, duration: Number(stdout.trim()) };
+}
+
+export interface VoiceLine {
+  file: string;
+  from?: number;
+  to?: number;
+  at: number;
+  max_seconds?: number;
+}
+
+// Builds one voiceover track from separate lines, each cut from a take (audio or video, from..to), placed at its own
+// moment in the film, and sped up slightly (at most 1.25x) when it would overrun max_seconds. Flow speaks a whole
+// take at its own pace and cannot time a word to an on-screen title, so the timing is done here instead: 2026-10-12,
+// a narration in the user's own Flow voice had to land each line on the kinetic text it describes.
+export async function voiceTrack(lines: VoiceLine[], out: string): Promise<{ file: string; lines: { at: number; seconds: number; speed: number }[]; warnings: string[] }> {
+  if (!lines.length) throw new Error("No voice lines given.");
+  const work = mkdtempSync(join(tmpdir(), "flow-voice-"));
+  try {
+    // Pass 1: cut each line and trim the silence at both ends, so a line is only sped up when the SPEECH is too long.
+    // On the first real run a cut kept 0.4 s of room tone after "Blender", was pushed to the 1.25x limit and still ran
+    // into the next line.
+    const quiet = (keep: number) => `silenceremove=start_periods=1:start_threshold=-42dB:start_silence=${keep}`;
+    const cuts: { file: string; seconds: number }[] = [];
+    for (const [i, l] of lines.entries()) {
+      if (!existsSync(l.file)) throw new Error(`File not found: ${l.file}`);
+      const from = Math.max(0, l.from ?? 0);
+      const trim = `atrim=start=${from.toFixed(3)}${l.to !== undefined ? `:end=${l.to.toFixed(3)}` : ""}`;
+      const cut = join(work, `line-${i + 1}.wav`);
+      await run(FFMPEG, ["-v", "error", "-y", "-i", l.file, "-vn", "-af", `${trim},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,${quiet(0.04)},areverse,${quiet(0.08)},areverse`, "-c:a", "pcm_s16le", cut]).catch(
+        (err: NodeJS.ErrnoException & { stderr?: string }) => {
+          throw new Error(err.code === "ENOENT" ? `ffmpeg is not installed (${FFMPEG_HINT}).` : `Could not cut voice line ${i + 1}: ${(err.stderr ?? String(err)).slice(-300)}`);
+        },
+      );
+      const { stdout } = await run(FFPROBE, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", cut]);
+      const seconds = Number(stdout.trim());
+      if (!(seconds > 0.05)) throw new Error(`Voice line ${i + 1} has no speech in it (from ${from}${l.to !== undefined ? ` to ${l.to}` : ""}).`);
+      cuts.push({ file: cut, seconds });
+    }
+    // Pass 2: speed each line to its slot only if it must, level it, and place it.
+    const args: string[] = ["-y"];
+    const filters: string[] = [];
+    const placed: { at: number; seconds: number; speed: number }[] = [];
+    for (const [i, l] of lines.entries()) {
+      const speed = l.max_seconds && cuts[i].seconds > l.max_seconds ? Math.min(1.25, cuts[i].seconds / l.max_seconds) : 1;
+      const seconds = cuts[i].seconds / speed;
+      const delay = Math.round(Math.max(0, l.at) * 1000);
+      args.push("-i", cuts[i].file);
+      // Each line is levelled on its own: separate takes come back at different loudness.
+      filters.push(
+        `[${i}:a]${speed > 1.001 ? `atempo=${speed.toFixed(3)},` : ""}loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000` +
+          `,afade=t=in:d=0.02,afade=t=out:st=${Math.max(0, seconds - 0.04).toFixed(3)}:d=0.04,adelay=${delay}|${delay}[l${i}]`,
+      );
+      placed.push({ at: l.at, seconds: Number(seconds.toFixed(2)), speed: Number(speed.toFixed(3)) });
+    }
+    const warnings: string[] = [];
+    placed.forEach((p, i) => {
+      const next = placed[i + 1];
+      if (next && p.at + p.seconds > next.at + 0.02) warnings.push(`Line ${i + 1} runs ${(p.at + p.seconds - next.at).toFixed(2)} s into line ${i + 2}.`);
+      if (lines[i].max_seconds && p.seconds > lines[i].max_seconds! + 0.02) warnings.push(`Line ${i + 1} still needs ${p.seconds} s after speeding up as far as sounds natural (1.25x).`);
+    });
+    filters.push(lines.length > 1 ? `${lines.map((_, i) => `[l${i}]`).join("")}amix=inputs=${lines.length}:duration=longest:dropout_transition=0:normalize=0[a]` : "[l0]anull[a]");
+    // Plain PCM: an AAC .m4a written from delayed, mixed lines came out unreadable ("Cannot calculate dts entry length"),
+    // and this file is only a step on the way to the film.
+    args.push("-filter_complex", filters.join(";"), "-map", "[a]", "-c:a", "pcm_s16le", out);
+    try {
+      await run(FFMPEG, args, { maxBuffer: 32 * 1024 * 1024 });
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException & { stderr?: string };
+      throw new Error(e.code === "ENOENT" ? `ffmpeg is not installed (${FFMPEG_HINT}).` : `ffmpeg could not build the voice track: ${(e.stderr ?? String(e)).slice(-400)}`);
+    }
+    return { file: out, lines: placed, warnings };
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
 }
 
 // Joins the scene clips into one film, keeping their own sound and laying music / voiceover on top.

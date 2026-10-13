@@ -475,3 +475,12 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   ~45 ms, one leading it goes unnoticed to ~125 ms), so every caption state now starts LEAD = 0.12 s early (`lead`
   option, -0.5..0.5, MCP only). The .srt shifts with it (first cue 0.22 -> 0.10). Size is now a percentage too
   (`size` small|medium|large or 40-250; the panel has a 50-180 % slider; old saved presets map to 80/100/120).
+- VOICEOVER IN THE USER'S OWN VOICE (2026-10-12): Flow's Voices tab holds only the 15 stock voices (the same as
+  Google AI Studio's); the user's own voice comes with the "Me" avatar, and the only way to make it speak is a paid
+  video take with reference_images ["asset:Me"] and the line in the prompt ("He says these exact words and nothing
+  else: ..."), keeping just the sound (Omni 1.1 Flash 360p: 4/5/6/7 credits for 4/6/8/10 s). Flow cannot time speech
+  to on-screen titles, so timing is local: flow_transcribe gives each word's start/end, and flow_assemble's
+  voice_lines places each line (file, from, to, at, max_seconds -> atempo up to 1.25x, per-line loudnorm) at its own
+  moment. The voice track is written as PCM WAV: AAC .m4a from delayed+mixed lines was unreadable ("Cannot calculate
+  dts entry length"), and whisper-cli exits 0 and writes no JSON on unreadable audio, so transcribe now checks for it.
+  Cut lines at the gap between words (midpoint), not word end + padding: padding pulled the next word's start in.
