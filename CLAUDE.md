@@ -484,3 +484,19 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   moment. The voice track is written as PCM WAV: AAC .m4a from delayed+mixed lines was unreadable ("Cannot calculate
   dts entry length"), and whisper-cli exits 0 and writes no JSON on unreadable audio, so transcribe now checks for it.
   Cut lines at the gap between words (midpoint), not word end + padding: padding pulled the next word's start in.
+- CAPTION LANGUAGES (2026-10-13): the auto-downloaded model was English-only (base.en) and "auto" picked it, so a
+  Spanish video got English-sounding nonsense with no error ("(speaking in foreign language)" at best). Now three
+  models, each fetched on first need (FLOW_MCP_MODEL_BASE = mirror folder): base.en 148 MB for English (best timing;
+  English fetches it even when a multilingual model exists, falling back to that one only if the download fails),
+  large-v3-turbo-q5_0 574 MB for every other language, and base-q5_1 60 MB that only DETECTS the language for "auto"
+  (whisper-cli -dl; the line "auto-detected language: xx" is on stderr and -np hides it). Measured on Mac `say` lines:
+  turbo heard every Spanish/German word where small-q5_1 (190 MB) misheard "ni un solo" -> "guión solo"; word starts
+  of both were within ~0.05 s of the waveform for most words; base-q5_1 detected 8/8 languages in 0.2 s. Detection
+  runs once per video ("auto" has its own cache entry). UNSPACED languages (ja, zh, yue, th...) get words from
+  Intl.Segmenter over a per-character timeline built from the tokens (tokens there are word pieces: 人/工/知/能), are
+  joined with no space, hold 3x the words per caption and count as full-width; edited text is segmented the same way
+  so alignText still matches. <html lang> is set so capitals follow the language (Turkish BİRLİKTE), RTL scripts get
+  dir=rtl (checked with Arabic text: order and highlight right). The panel has a "Spoken language" select (37 languages
+  + Detect automatically), defaulting to the browser's language when listed, else English; changing it re-listens and
+  drops corrections. The panel read transcribe's `words` (now an array since flow_transcribe) as the word count; it
+  now asks words:false and shows word_count.

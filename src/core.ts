@@ -79,7 +79,12 @@ const captionFields = {
     .optional()
     .describe("as_said keeps normal capitals (sentence starts, names); capitals is the high-energy short-form look; lowercase is the calm, casual look. Default: capitals for bold, as_said for the rest."),
   text: z.string().max(50_000).optional().describe("Corrected words, to fix anything misheard. Timings are kept for every word that still matches; a line break starts a new caption."),
-  language: z.string().default("auto").describe("Spoken language code (en, es, de...) or auto."),
+  language: z
+    .string()
+    .default("auto")
+    .describe(
+      "Spoken language as a code: en, es, fr, de, pt, tr, ja, zh, ar... Pass it whenever you know it. auto detects it (a 60 MB detector downloads once). English uses a 148 MB model; every other language a 574 MB one, each downloaded the first time.",
+    ),
 };
 
 export const shapes = {
@@ -132,7 +137,7 @@ export const shapes = {
   },
   transcribe: {
     video: z.string().min(1).describe("Absolute path of a video or audio file on this computer."),
-    language: z.string().default("auto"),
+    language: z.string().default("auto").describe("Spoken language code (en, es, tr, ja...) or auto. Pass it whenever you know it."),
     words: z.boolean().default(true).describe("Include every word with its start and end time in seconds."),
   },
   caption_preview: captionFields,

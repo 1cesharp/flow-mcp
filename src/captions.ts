@@ -21,10 +21,24 @@ const WHISPER = process.env.FLOW_MCP_WHISPER ?? "whisper-cli";
 // Transcripts and preview stills; the panel is allowed to show pictures from here.
 export const CACHE_DIR = join(HOME_DIR, "captions");
 const MODEL_DIR = join(HOME_DIR, "models");
-// The model fetched on first use: whisper.cpp's own base.en, 148 MB. FLOW_MCP_MODEL_URL points it at a mirror.
-const MODEL_NAME = "ggml-base.en.bin";
-const MODEL_URL = process.env.FLOW_MCP_MODEL_URL ?? `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_NAME}`;
+// Speech models fetched the first time they are needed, from whisper.cpp's own collection on Hugging Face
+// (FLOW_MCP_MODEL_BASE points at a mirror folder holding the same files). The sizes are what the panel tells the user.
+const SPEECH_MODELS = {
+  // English: base.en, an English-only model; those time words best (see PREFERENCE).
+  english: { file: "ggml-base.en.bin", mb: 148, purpose: "for English" },
+  // Every other language. Measured on Spanish, German, Japanese and Chinese lines (2026-10-13): large-v3-turbo heard
+  // every Spanish and German word where small misheard several ("ni un solo" -> "guión solo", "listos" -> "vistos"),
+  // placed words as well, and still runs at about ten times real time. q5_0 is its compressed form: the same words at
+  // a third of the size.
+  other: { file: "ggml-large-v3-turbo-q5_0.bin", mb: 574, purpose: "for this language" },
+  // Only names the spoken language, for "auto": right on all 8 test languages in 0.2 s, so an English speaker who never
+  // picks a language is not sent the 574 MB model.
+  detect: { file: "ggml-base-q5_1.bin", mb: 60, purpose: "that recognises the language" },
+} as const;
+type SpeechModel = keyof typeof SPEECH_MODELS;
+const MODEL_BASE = (process.env.FLOW_MCP_MODEL_BASE ?? "https://huggingface.co/ggerganov/whisper.cpp/resolve/main").replace(/\/+$/, "");
 const BIG = { maxBuffer: 64 * 1024 * 1024 };
+const THREADS = String(Math.max(2, Math.min(8, cpus().length - 1)));
 type RunError = NodeJS.ErrnoException & { stderr?: string };
 
 export interface Word {
@@ -70,6 +84,28 @@ export interface CaptionOptions {
   language?: string;
 }
 
+// The languages the panel offers, by their own names. whisper.cpp knows about 100; any other code works through the MCP.
+export const CAPTION_LANGUAGES = [
+  ["en", "English"], ["es", "Español"], ["pt", "Português"], ["fr", "Français"], ["de", "Deutsch"], ["it", "Italiano"],
+  ["nl", "Nederlands"], ["tr", "Türkçe"], ["pl", "Polski"], ["ru", "Русский"], ["uk", "Українська"], ["ar", "العربية"],
+  ["he", "עברית"], ["fa", "فارسی"], ["hi", "हिन्दी"], ["ur", "اردو"], ["bn", "বাংলা"], ["ta", "தமிழ்"], ["id", "Bahasa Indonesia"],
+  ["ms", "Bahasa Melayu"], ["tl", "Filipino"], ["vi", "Tiếng Việt"], ["th", "ไทย"], ["ja", "日本語"], ["zh", "中文"], ["yue", "粵語"],
+  ["ko", "한국어"], ["sv", "Svenska"], ["da", "Dansk"], ["no", "Norsk"], ["fi", "Suomi"], ["el", "Ελληνικά"], ["cs", "Čeština"],
+  ["ro", "Română"], ["hu", "Magyar"], ["ca", "Català"], ["sw", "Kiswahili"],
+].map(([code, name]) => ({ code, name }));
+// Written without spaces between words: whisper's tokens are then pieces of words, so words come from the language's
+// own word breaker, and they are drawn side by side with no space between them.
+const UNSPACED = new Set(["ja", "zh", "yue", "th", "lo", "km", "my", "bo"]);
+// Letters about one em wide, far wider than the Latin letters CHAR_EM is measured on.
+const FULL_WIDTH = new Set(["ja", "zh", "yue", "ko"]);
+const RTL = new Set(["ar", "he", "fa", "ur", "yi", "ps", "sd", "ug"]);
+const joiner = (lang: string) => (UNSPACED.has(lang) ? "" : " ");
+// Punctuation that opens a word (¿Qué, «Hola, 「はい) and punctuation that ends one or a sentence, in many scripts.
+const OPENER = /^[¿¡«“„‘‚(\[{「『（《〈]+$/;
+const CLOSER = /^[.,!?;:%)\]}"'»…\-。、，！？；：）」』》〉”’،؛؟।]/;
+const SENTENCE_END = /[.!?…。！？؟।]["')\]」』）”’]*$/;
+const CLAUSE_END = /[,;:，、；：،؛]$/;
+
 const lettersOf = (o: { style: CaptionStyle; letters?: CaptionLetters }): CaptionLetters => o.letters ?? CAPTION_STYLES[o.style].letters;
 
 // Letter size as a share of the frame's short side, so a 9:16 phone video and a 16:9 landscape one read the same.
@@ -86,30 +122,31 @@ const LEAD = 0.12;
 
 /* ---------- hearing the words ---------- */
 
-const MODEL_PREFERENCE = [
-  // English-only models time words best. large-v3-turbo is the most accurate listener but placed "picks" 0.6 s
-  // early in a test where small.en was 30 ms out, so it comes last.
-  "ggml-small.en.bin",
-  "ggml-base.en.bin",
-  "ggml-medium.en.bin",
-  "ggml-small.bin",
-  "ggml-base.bin",
-  "ggml-medium.bin",
-  "ggml-large-v3-turbo.bin",
-  "ggml-large-v3.bin",
-];
+const MODEL_DIRS = [MODEL_DIR, join(homedir(), ".cache", "whisper-models"), join(homedir(), ".cache", "whisper.cpp")];
+const PREFERENCE: Record<SpeechModel, string[]> = {
+  // English-only models time words best. large-v3-turbo is the most accurate listener but placed "picks" 0.6 s early
+  // in an English test where small.en was 30 ms out, so for English it is only a fallback.
+  english: ["ggml-small.en.bin", "ggml-base.en.bin", "ggml-medium.en.bin"],
+  // For other languages hearing the words right matters most. base and the compressed small are left out on purpose:
+  // they mishear too much to caption with, even when present (the language detector is one of them).
+  other: ["ggml-large-v3-turbo.bin", "ggml-large-v3-turbo-q5_0.bin", "ggml-large-v3.bin", "ggml-medium.bin", "ggml-small.bin"],
+  // Any multilingual model can name the language; the fastest goes first.
+  detect: ["ggml-base-q5_1.bin", "ggml-base.bin", "ggml-small-q5_1.bin", "ggml-small.bin", "ggml-large-v3-turbo-q5_0.bin", "ggml-large-v3-turbo.bin", "ggml-medium.bin", "ggml-large-v3.bin"],
+};
+const installed = (kind: SpeechModel): string | undefined => PREFERENCE[kind].flatMap((name) => MODEL_DIRS.map((d) => join(d, name))).find((p) => existsSync(p));
 
-class NoModel extends Error {}
-
-function findModel(language: string): string {
+// The model that hears one language, downloaded the first time it is needed. English gets its own model even when a
+// multilingual one is there, for the timing; a multilingual model only stands in when that download fails.
+async function modelFor(lang: string): Promise<string> {
   if (process.env.FLOW_MCP_WHISPER_MODEL) return process.env.FLOW_MCP_WHISPER_MODEL;
-  const dirs = [MODEL_DIR, join(homedir(), ".cache", "whisper-models"), join(homedir(), ".cache", "whisper.cpp")];
-  const found = MODEL_PREFERENCE.flatMap((name) => dirs.map((d) => join(d, name))).filter((p) => existsSync(p));
-  // An English-only model cannot hear another language, so prefer a multilingual one when one is asked for.
-  const wantOther = language !== "auto" && language !== "en";
-  const pick = (wantOther ? found.find((p) => !p.includes(".en.")) : undefined) ?? found[0];
-  if (!pick) throw new NoModel();
-  return pick;
+  if (lang !== "en") return installed("other") ?? fetchModel("other");
+  const english = installed("english");
+  if (english) return english;
+  const other = installed("other");
+  return fetchModel("english").catch((err: Error) => {
+    if (other) return other;
+    throw err;
+  });
 }
 
 const WHISPER_HINT = IS_MAC
@@ -119,28 +156,37 @@ const WHISPER_HINT = IS_MAC
     : "install whisper.cpp so whisper-cli is on your PATH";
 
 // What the panel needs to know before offering captions, and the fix for whatever is missing.
-export async function captionSetup(): Promise<{ ready: boolean; whisper: boolean; whisper_hint?: string; model?: string; models_dir: string }> {
+export async function captionSetup(): Promise<{
+  ready: boolean;
+  whisper: boolean;
+  whisper_hint?: string;
+  models: Record<SpeechModel, boolean>;
+  download_mb: Record<SpeechModel, number>;
+  languages: typeof CAPTION_LANGUAGES;
+  models_dir: string;
+}> {
   const whisper = await run(WHISPER, ["--help"]).then(
     () => true,
     (err: RunError) => err.code !== "ENOENT",
   );
-  let model: string | undefined;
-  try {
-    model = basename(findModel("auto"));
-  } catch {
-    model = undefined;
-  }
-  // The model is not a precondition: it downloads itself the first time it is needed.
-  return { ready: whisper, whisper, whisper_hint: whisper ? undefined : WHISPER_HINT, model, models_dir: MODEL_DIR };
+  const forced = Boolean(process.env.FLOW_MCP_WHISPER_MODEL);
+  // The models are not a precondition: each downloads itself the first time it is needed. The panel uses these to say
+  // how big the wait will be.
+  const models = { english: forced || Boolean(installed("english")), other: forced || Boolean(installed("other")), detect: forced || Boolean(installed("detect")) };
+  const download_mb = { english: SPEECH_MODELS.english.mb, other: SPEECH_MODELS.other.mb, detect: SPEECH_MODELS.detect.mb };
+  return { ready: whisper, whisper, whisper_hint: whisper ? undefined : WHISPER_HINT, models, download_mb, languages: CAPTION_LANGUAGES, models_dir: MODEL_DIR };
 }
 
 // Fetched by itself the first time captions are needed (the user chose this over a button, 2026-10-09). One download
 // at a time even if the panel and an assistant ask together; written to .part and renamed, so a cut-off download is
 // never mistaken for a model.
-let fetching: Promise<string> | null = null;
-function downloadSpeechModel(): Promise<string> {
-  fetching ??= (async () => {
-    const dest = join(MODEL_DIR, MODEL_NAME);
+const fetching = new Map<SpeechModel, Promise<string>>();
+function fetchModel(kind: SpeechModel): Promise<string> {
+  const { file, mb, purpose } = SPEECH_MODELS[kind];
+  const pending = fetching.get(kind);
+  if (pending) return pending;
+  const job = (async () => {
+    const dest = join(MODEL_DIR, file);
     if (existsSync(dest)) return dest;
     mkdirSync(MODEL_DIR, { recursive: true });
     // curl, not fetch: Node's built-in fetch can crash the whole process on an assertion (undici, "assert(!this.paused)")
@@ -148,21 +194,25 @@ function downloadSpeechModel(): Promise<string> {
     // Claude's connector. curl ships with macOS and Windows 10+, follows the redirect to the download host, and can
     // only fail itself.
     const part = `${dest}.part`;
-    await run("curl", ["-L", "--fail", "--silent", "--show-error", "--connect-timeout", "20", "--retry", "2", "-o", part, MODEL_URL], BIG).catch((err: RunError) => {
+    await run("curl", ["-L", "--fail", "--silent", "--show-error", "--connect-timeout", "20", "--retry", "2", "-o", part, `${MODEL_BASE}/${file}`], BIG).catch((err: RunError) => {
       rmSync(part, { force: true });
       throw new Error(err.code === "ENOENT" ? "curl is not installed" : String(err.stderr || err.message).trim().split("\n").at(-1));
     });
-    const size = statSync(part).size;
-    if (size < 100_000_000) {
+    if (statSync(part).size < mb * 0.9e6) {
       rmSync(part, { force: true });
       throw new Error("it arrived incomplete");
     }
     renameSync(part, dest);
     return dest;
-  })().finally(() => {
-    fetching = null;
-  });
-  return fetching;
+  })()
+    .catch((e: Error) => {
+      throw new Error(
+        `Captions need a speech model ${purpose}, downloaded once (${mb} MB), and the download failed: ${e.message}. Check the internet connection and try again, or put ${file} in ${MODEL_DIR} yourself.`,
+      );
+    })
+    .finally(() => fetching.delete(kind));
+  fetching.set(kind, job);
+  return job;
 }
 
 async function probe(file: string, needPicture = true): Promise<{ width: number; height: number; duration: number; audio?: string }> {
@@ -188,63 +238,133 @@ async function probe(file: string, needPicture = true): Promise<{ width: number;
   return { width, height, duration: Number(data.format.duration ?? 0), audio: data.streams.find((s) => s.codec_type === "audio")?.codec_name };
 }
 
+interface WhisperJson {
+  transcription: { tokens?: { text: string; offsets: { from: number; to: number } }[] }[];
+  result?: { language?: string };
+}
+
 // whisper.cpp's word-sized segments (-ml 1) run each word into the next, hiding every pause. Its tokens keep the real
 // gaps, so words are rebuilt from those: a token that starts with a space starts a new word, anything else (", 't")
-// belongs to the word before it.
-function wordsFromTokens(json: { transcription: { tokens?: { text: string; offsets: { from: number; to: number } }[] }[] }): Word[] {
+// belongs to the word before it, and a lone opening mark (¿, «) belongs to the word after it.
+function wordsFromTokens(json: WhisperJson, lang: string): Word[] {
   const words: Word[] = [];
-  for (const seg of json.transcription) {
-    for (const t of seg.tokens ?? []) {
-      if (/^\s*\[_/.test(t.text)) continue;
-      const clean = t.text.trim();
-      if (!clean) continue;
-      const last = words.at(-1);
-      if (last && (!/^\s/.test(t.text) || /^[.,!?;:%)\]}"'»…-]/.test(clean))) {
-        last.text += clean;
-        last.end = t.offsets.to / 1000;
-      } else words.push({ text: clean, start: t.offsets.from / 1000, end: t.offsets.to / 1000 });
+  if (UNSPACED.has(lang)) {
+    // Here tokens are pieces of words (人 / 工 / 知 / 能), so each character takes its time from its token and words
+    // come from the language's own word breaker: 今日 / は / 人工 / 知能 / を.
+    let text = "";
+    const at: { start: number; end: number }[] = [];
+    for (const seg of json.transcription) {
+      for (const t of seg.tokens ?? []) {
+        if (/^\s*\[_/.test(t.text)) continue;
+        const [from, to] = [t.offsets.from / 1000, t.offsets.to / 1000];
+        const chars = [...t.text];
+        chars.forEach((c, i) => {
+          text += c;
+          for (let k = 0; k < c.length; k++) at.push({ start: from + ((to - from) * i) / chars.length, end: from + ((to - from) * (i + 1)) / chars.length });
+        });
+      }
+      text += " ";
+      at.push(at.at(-1) ?? { start: 0, end: 0 });
+    }
+    for (const w of segmentWords(text, lang)) words.push({ text: w.text, start: at[w.from].start, end: at[w.to - 1].end });
+  } else {
+    let opener = "";
+    for (const seg of json.transcription) {
+      for (const t of seg.tokens ?? []) {
+        if (/^\s*\[_/.test(t.text)) continue;
+        const clean = t.text.trim();
+        if (!clean) continue;
+        const last = words.at(-1);
+        if (OPENER.test(clean)) opener += clean;
+        else if (last && !opener && (!/^\s/.test(t.text) || CLOSER.test(clean))) {
+          last.text += clean;
+          last.end = t.offsets.to / 1000;
+        } else {
+          words.push({ text: opener + clean, start: t.offsets.from / 1000, end: t.offsets.to / 1000 });
+          opener = "";
+        }
+      }
     }
   }
   // Drop what whisper writes for non-speech: [MUSIC], (laughs), ♪.
-  return words.filter((w) => !/^[[(♪*].*[\])♪*]$|^♪+$/.test(w.text));
+  return words.filter((w) => !/^[[(♪*（].*[\])♪*）]$|^♪+$/.test(w.text));
 }
 
+// Splits text written without spaces into words (Intl.Segmenter knows each language's dictionary), keeping punctuation
+// with its word. from/to are positions in the text.
+function segmentWords(text: string, lang: string): { text: string; from: number; to: number }[] {
+  const out: { text: string; from: number; to: number }[] = [];
+  let open: { text: string; from: number } | undefined;
+  for (const s of new Intl.Segmenter(lang, { granularity: "word" }).segment(text)) {
+    const piece = s.segment.trim();
+    if (!piece) continue;
+    const to = s.index + s.segment.length;
+    const last = out.at(-1);
+    if (!s.isWordLike && OPENER.test(piece)) open = { text: (open?.text ?? "") + piece, from: open?.from ?? s.index };
+    else if (!s.isWordLike && last && !open) {
+      last.text += piece;
+      last.to = to;
+    } else {
+      out.push({ text: (open?.text ?? "") + piece, from: open?.from ?? s.index, to });
+      open = undefined;
+    }
+  }
+  return out;
+}
+
+// Which language is spoken, from the first 30 seconds.
+async function detectLanguage(wav: string): Promise<string> {
+  const model = installed("detect") ?? (await fetchModel("detect"));
+  const { stdout, stderr } = await run(WHISPER, ["-m", model, "-f", wav, "-l", "auto", "-dl", "-t", THREADS], BIG).catch(whisperFailed);
+  const lang = /auto-detected language: ([a-z]+)/.exec(`${stderr}${stdout}`)?.[1];
+  if (!lang) throw new Error("Couldn't tell which language is spoken. Pick the language and try again.");
+  return lang;
+}
+
+function whisperFailed(err: RunError): never {
+  if (err.code === "ENOENT") throw new Error(`Captions need whisper.cpp to hear the words. Install it: ${WHISPER_HINT}.`);
+  throw new Error(`whisper.cpp could not read the sound: ${String(err.stderr ?? err.message).trim().split("\n").at(-1)}`);
+}
+
+// language: a whisper code (en, es, ja...) or "auto", which detects it first.
 export async function transcribe(video: string, language = "auto"): Promise<Transcript> {
   const info = await probe(video, false);
   if (!info.audio) throw new Error(`"${basename(video)}" has no sound, so there are no words to caption.`);
-  let model: string;
-  try {
-    model = findModel(language);
-  } catch (err) {
-    if (!(err instanceof NoModel)) throw err;
-    model = await downloadSpeechModel().catch((e: Error) => {
-      throw new Error(`Captions need a speech model, downloaded once (148 MB), and the download failed: ${e.message}. Check the internet connection and try again, or put ${MODEL_NAME} in ${MODEL_DIR} yourself.`);
-    });
-  }
-  const lang = basename(model).includes(".en.") ? "en" : language;
+  const asked = language.trim().toLowerCase() || "auto";
+  if (!/^(auto|[a-z]{2,3})$/.test(asked)) throw new Error(`"${language}" isn't a language code. Use a code such as en, es or ja, or auto.`);
   const st = statSync(video);
-  const key = createHash("sha1").update(`${video}|${st.size}|${st.mtimeMs}|${basename(model)}|${lang}`).digest("hex").slice(0, 16);
-  const cached = join(CACHE_DIR, `${key}.json`);
-  if (existsSync(cached)) return JSON.parse(readFileSync(cached, "utf8")) as Transcript;
+  const cacheFile = (...parts: string[]) => join(CACHE_DIR, `${createHash("sha1").update([video, st.size, st.mtimeMs, ...parts].join("|")).digest("hex").slice(0, 16)}.json`);
+  const keep = (t: Transcript, ...files: (string | undefined)[]) => {
+    mkdirSync(CACHE_DIR, { recursive: true });
+    for (const f of files) if (f) writeFileSync(f, JSON.stringify(t));
+    return t;
+  };
+  // "auto" is remembered on its own, so the language is detected once per video, not on every preview.
+  const autoFile = asked === "auto" ? cacheFile("auto") : undefined;
+  if (autoFile && existsSync(autoFile)) return JSON.parse(readFileSync(autoFile, "utf8")) as Transcript;
 
   const work = mkdtempSync(join(tmpdir(), "flow-captions-"));
+  const wav = join(work, "audio.wav");
+  const extract = () => run(FFMPEG, ["-v", "error", "-y", "-i", video, "-vn", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], BIG);
   try {
-    const wav = join(work, "audio.wav");
-    await run(FFMPEG, ["-v", "error", "-y", "-i", video, "-vn", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], BIG);
-    const threads = String(Math.max(2, Math.min(8, cpus().length - 1)));
-    await run(WHISPER, ["-m", model, "-f", wav, "-l", lang, "-t", threads, "-ojf", "-of", join(work, "words"), "-np"], BIG).catch((err: RunError) => {
-      if (err.code === "ENOENT") throw new Error(`Captions need whisper.cpp to hear the words. Install it: ${WHISPER_HINT}.`);
-      throw new Error(`whisper.cpp could not read the sound: ${String(err.stderr ?? err.message).trim().split("\n").at(-1)}`);
-    });
+    let lang = asked;
+    if (lang === "auto" && !process.env.FLOW_MCP_WHISPER_MODEL) {
+      await extract();
+      lang = await detectLanguage(wav);
+    }
+    const model = await modelFor(lang);
+    if (basename(model).includes(".en.")) lang = "en";
+    const cached = cacheFile(basename(model), lang);
+    if (existsSync(cached)) return keep(JSON.parse(readFileSync(cached, "utf8")) as Transcript, autoFile);
+    if (!existsSync(wav)) await extract();
+    await run(WHISPER, ["-m", model, "-f", wav, "-l", lang, "-t", THREADS, "-ojf", "-of", join(work, "words"), "-np"], BIG).catch(whisperFailed);
     // whisper-cli exits 0 even when it cannot read the audio, and simply writes nothing.
     if (!existsSync(join(work, "words.json"))) throw new Error(`whisper.cpp could not read the sound in "${basename(video)}".`);
-    const json = JSON.parse(readFileSync(join(work, "words.json"), "utf8")) as Parameters<typeof wordsFromTokens>[0] & { result?: { language?: string } };
-    const words = wordsFromTokens(json);
+    const json = JSON.parse(readFileSync(join(work, "words.json"), "utf8")) as WhisperJson;
+    const heard = json.result?.language ?? lang;
+    const words = wordsFromTokens(json, heard);
     if (!words.length) throw new Error(`No speech was heard in "${basename(video)}".`);
-    const out: Transcript = { words, text: words.map((w) => w.text).join(" "), language: json.result?.language ?? lang, model: basename(model) };
-    mkdirSync(CACHE_DIR, { recursive: true });
-    writeFileSync(cached, JSON.stringify(out));
-    return out;
+    return keep({ words, text: words.map((w) => w.text).join(joiner(heard)), language: heard, model: basename(model) }, cached, autoFile);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -256,13 +376,10 @@ const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}']+/gu, "");
 
 // Lines up a corrected transcript with the timed one. Every word that still matches keeps its timing; new or changed
 // words are spread evenly over the gap they fill, so fixing "flo" to "Flow" or adding a missed word just works.
-export function alignText(timed: Word[], text: string): Word[] {
+export function alignText(timed: Word[], text: string, lang = "en"): Word[] {
   const toks: { text: string; br: boolean }[] = [];
   text.split("\n").forEach((line, li) =>
-    line
-      .split(/\s+/)
-      .filter(Boolean)
-      .forEach((t, i) => toks.push({ text: t, br: li > 0 && i === 0 })),
+    (UNSPACED.has(lang) ? segmentWords(line, lang).map((w) => w.text) : line.split(/\s+/).filter(Boolean)).forEach((t, i) => toks.push({ text: t, br: li > 0 && i === 0 })),
   );
   if (!toks.length) return [];
   const a = timed.map((w) => norm(w.text));
@@ -321,7 +438,7 @@ interface State {
   to: number;
 }
 
-function paginate(words: Word[], maxWords: number, maxChars: number): Word[][] {
+function paginate(words: Word[], maxWords: number, maxChars: number, sep: string): Word[][] {
   const pages: Word[][] = [];
   let cur: Word[] = [];
   let chars = 0;
@@ -332,8 +449,8 @@ function paginate(words: Word[], maxWords: number, maxChars: number): Word[][] {
       (w.br ||
         cur.length >= maxWords ||
         chars + w.text.length > maxChars ||
-        /[.!?…]["')\]]*$/.test(prev.text) ||
-        /[,;:]$/.test(prev.text) ||
+        SENTENCE_END.test(prev.text) ||
+        CLAUSE_END.test(prev.text) ||
         w.start - prev.end > 0.6);
     if (brk) {
       pages.push(cur);
@@ -341,22 +458,23 @@ function paginate(words: Word[], maxWords: number, maxChars: number): Word[][] {
       chars = 0;
     }
     cur.push(w);
-    chars += w.text.length + 1;
+    chars += w.text.length + sep.length;
   }
   if (cur.length) pages.push(cur);
   return pages;
 }
 
-function layout(heard: Word[], style: CaptionStyle, width: number, height: number, size: CaptionSize, letters: CaptionLetters, lead: number): { pages: Word[][]; states: State[] } {
+function layout(heard: Word[], style: CaptionStyle, width: number, height: number, size: CaptionSize, letters: CaptionLetters, lead: number, lang: string): { pages: Word[][]; states: State[] } {
   const words = heard.map((w) => ({ ...w, start: Math.max(0, w.start - lead), end: Math.max(0, w.end - lead) }));
   const s = CAPTION_STYLES[style];
   const u = (Math.min(width, height) / 100) * scaleOf(size);
   // Capitals are wider than small letters, so fewer of them fit on a line.
-  const wide = CHAR_EM[style] * (letters === "capitals" && style !== "bold" ? 1.2 : letters !== "capitals" && style === "bold" ? 0.85 : 1);
+  const wide = FULL_WIDTH.has(lang) ? 1 : CHAR_EM[style] * (letters === "capitals" && style !== "bold" ? 1.2 : letters !== "capitals" && style === "bold" ? 0.85 : 1);
   const perLine = Math.max(8, Math.floor(boxWidth(style, width, height) / (FONT[style] * u * wide)));
-  const pages = paginate(words, s.maxWords, perLine * 2);
+  // Words written without spaces are short (は, を, 的), so a caption holds more of them.
+  const pages = paginate(words, s.maxWords * (UNSPACED.has(lang) ? 3 : 1), perLine * 2, joiner(lang));
   // Capitals and lowercase read better without commas and full stops; question and exclamation marks stay.
-  const shown = (t: string) => (letters === "as_said" ? t : t.replace(/[.,;:]+$/, ""));
+  const shown = (t: string) => (letters === "as_said" ? t : t.replace(/[.,;:。、，；：،؛]+$/, ""));
   const states: State[] = [];
   let clock = 0;
   const push = (st: State) => {
@@ -400,7 +518,7 @@ function textOn(hex: string): string {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? "#111111" : "#FFFFFF";
 }
 
-function pageHtml(style: CaptionStyle, o: { width: number; height: number; position: CaptionPosition; size: CaptionSize; color: string; letters: CaptionLetters; background?: string }): string {
+function pageHtml(style: CaptionStyle, o: { width: number; height: number; position: CaptionPosition; size: CaptionSize; color: string; letters: CaptionLetters; lang: string; background?: string }): string {
   const { width: W, height: H } = o;
   const vertical = H > W;
   const font = FONT[style] * (Math.min(W, H) / 100) * scaleOf(o.size);
@@ -424,18 +542,21 @@ function pageHtml(style: CaptionStyle, o: { width: number; height: number; posit
     clean: `.cap{font:700 ${font}px/1.25 ${sans};color:#fff;text-shadow:0 .04em .12em rgba(0,0,0,.9),0 0 .35em rgba(0,0,0,.55)}`,
     boxed: `.cap{font:700 ${font}px/1.55 ${sans};color:#fff}.inner{display:inline;background:rgba(0,0,0,.74);padding:.12em .45em;border-radius:.28em;-webkit-box-decoration-break:clone;box-decoration-break:clone}`,
   }[style];
-  return `<!doctype html><html><head><meta charset="utf-8"><style>
+  // The language tag makes capitals right for the language (Turkish i -> İ, not I); right-to-left scripts read that way.
+  const lang = /^[a-z]{2,3}$/.test(o.lang) ? o.lang : "en";
+  return `<!doctype html><html lang="${lang}"${RTL.has(lang) ? ' dir="rtl"' : ""}><head><meta charset="utf-8"><style>
 html,body{margin:0;width:${W}px;height:${H}px;overflow:hidden;background:${o.background ? `#000 url(${o.background}) center/100% 100% no-repeat` : "transparent"}}
 .cap{position:absolute;left:50%;width:${boxWidth(style, W, H)}px;text-align:center;text-wrap:balance;--hl:${o.color};--on:${textOn(o.color)};${place};-webkit-font-smoothing:antialiased}
 .inner{display:block;transform-origin:50% 60%}
 ${css}
 .cap{text-transform:${{ as_said: "none", capitals: "uppercase", lowercase: "lowercase" }[o.letters]}}
+${UNSPACED.has(lang) ? ".w{margin-left:.03em;margin-right:.03em}" + (style === "highlight" ? ".w{margin-left:-.07em;margin-right:-.07em}" : "") : ""}
 </style></head><body><div class="cap"><div class="inner" id="inner"></div></div><script>
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 window.paint = (s) => {
   const el = document.getElementById("inner");
   el.style.transform = s.scale === 1 ? "" : "scale(" + s.scale + ")";
-  el.innerHTML = s.words.map((w, i) => '<span class="w' + (i === s.active ? " on" : "") + (${style === "reveal"} && i > s.active ? " later" : "") + '" data-t="' + esc(w) + '">' + esc(w) + "</span>").join(" ");
+  el.innerHTML = s.words.map((w, i) => '<span class="w' + (i === s.active ? " on" : "") + (${style === "reveal"} && i > s.active ? " later" : "") + '" data-t="' + esc(w) + '">' + esc(w) + "</span>").join(${JSON.stringify(joiner(lang))});
 };
 </script></body></html>`;
 }
@@ -486,14 +607,15 @@ async function timedWords(video: string, o: CaptionOptions): Promise<{ transcrip
   const transcript = await transcribe(video, o.language ?? "auto");
   const edited = o.text?.trim();
   const same = edited !== undefined && norm(edited.replace(/\s+/g, "")) === norm(transcript.text.replace(/\s+/g, "")) && !edited.includes("\n");
-  return { transcript, words: edited && !same ? alignText(transcript.words, edited) : transcript.words };
+  return { transcript, words: edited && !same ? alignText(transcript.words, edited, transcript.language) : transcript.words };
 }
 
 // One still of the real video with the real captions on it, so the panel shows exactly what will be made.
 export async function previewCaptions(video: string, o: CaptionOptions): Promise<{ image: string; at: number }> {
   const info = await probe(video);
-  const { words } = await timedWords(video, o);
-  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o), o.lead ?? LEAD);
+  const { transcript, words } = await timedWords(video, o);
+  const lang = transcript.language;
+  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o), o.lead ?? LEAD, lang);
   // A caption of a few words, about a third of the way in, mid-sentence.
   const want = (pages[0]?.[0].start ?? 0) + ((pages.at(-1)?.at(-1)?.end ?? 0) - (pages[0]?.[0].start ?? 0)) * 0.33;
   const page = pages.filter((p) => p.length >= Math.min(2, CAPTION_STYLES[o.style].maxWords)).sort((p, q) => Math.abs(p[0].start - want) - Math.abs(q[0].start - want))[0] ?? pages[0];
@@ -507,7 +629,7 @@ export async function previewCaptions(video: string, o: CaptionOptions): Promise
   await run(FFMPEG, ["-v", "error", "-y", "-ss", at.toFixed(3), "-i", video, "-frames:v", "1", "-q:v", "3", frame], BIG);
   const background = `data:image/jpeg;base64,${readFileSync(frame).toString("base64")}`;
   const image = join(CACHE_DIR, `preview-${key}.jpg`);
-  await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o), background }), async (p) => {
+  await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o), lang, background }), async (p) => {
     if (state) await p.evaluate((s) => (window as unknown as { paint: (s: unknown) => void }).paint(s), state);
     await p.screenshot({ path: image, type: "jpeg", quality: 85 });
   });
@@ -528,20 +650,23 @@ export interface CaptionResult {
   words: number;
   duration: number;
   transcript: string;
+  language: string;
   model: string;
 }
 
 export async function burnCaptions(video: string, o: CaptionOptions, output: string): Promise<CaptionResult> {
   const info = await probe(video);
   const { transcript, words } = await timedWords(video, o);
-  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o), o.lead ?? LEAD);
+  const lang = transcript.language;
+  const sep = joiner(lang);
+  const { pages, states } = layout(words, o.style, info.width, info.height, o.size, lettersOf(o), o.lead ?? LEAD, lang);
   if (!states.length) throw new Error("There are no words to put on screen.");
 
   const work = mkdtempSync(join(tmpdir(), "flow-captions-"));
   try {
     // Draw every distinct caption once, as a transparent picture the size of the video.
     const files = new Map<string, string>();
-    await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o) }), async (p) => {
+    await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o), lang }), async (p) => {
       await p.screenshot({ path: join(work, "blank.png"), omitBackground: true });
       for (const s of states) {
         const id = JSON.stringify([s.words, s.active, s.scale]);
@@ -592,11 +717,11 @@ export async function burnCaptions(video: string, o: CaptionOptions, output: str
         .map((p, i) => {
           const next = pages[i + 1]?.[0].start;
           const end = next !== undefined ? Math.min(p[p.length - 1].end + 0.25, next) : p[p.length - 1].end + 0.25;
-          return `${i + 1}\n${stamp(p[0].start)} --> ${stamp(end)}\n${p.map((w) => w.text).join(" ")}\n`;
+          return `${i + 1}\n${stamp(p[0].start)} --> ${stamp(end)}\n${p.map((w) => w.text).join(sep)}\n`;
         })
         .join("\n"),
     );
-    return { output, srt, captions: pages.length, words: words.length, duration: info.duration, transcript: words.map((w) => w.text).join(" "), model: transcript.model };
+    return { output, srt, captions: pages.length, words: words.length, duration: info.duration, transcript: words.map((w) => w.text).join(sep), language: lang, model: transcript.model };
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

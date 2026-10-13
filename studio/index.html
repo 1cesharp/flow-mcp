@@ -369,6 +369,8 @@ audio{width:100%;margin-top:8px;filter:invert(1) hue-rotate(180deg)}
             <button type="button" class="btn small ghost" id="cap_film">From my films</button>
           </div>
           <div class="rowbtns" style="flex-wrap:nowrap"><input type="text" id="cap_path" spellcheck="false" placeholder="…or paste where a video is saved" style="flex:1;min-width:0"><button type="button" class="btn small" id="cap_pathgo">Use</button></div>
+          <label class="f" for="cap_lang">Spoken language</label>
+          <select id="cap_lang"></select>
           <label class="f">Style</label>
           <div class="capstyles" id="cap_styles"></div>
           <div class="grid2">
@@ -848,8 +850,30 @@ const capLetters = (style) => S.captions.letters?.[style] ?? (style === "bold" ?
 const CASE_CSS = { as_said: "none", capitals: "uppercase", lowercase: "lowercase" };
 // Size is a percentage of the style's normal size; older saved settings said small, medium or large.
 const capSize = () => (typeof S.captions.size === "number" ? S.captions.size : { small: 80, medium: 100, large: 120 }[S.captions.size] ?? 100);
+// The language spoken in the video. The first time it is the browser's own language when it is one we list, else English.
+const capLang = () => S.captions.language ?? "en";
+const capLangName = (code) => capSetup?.languages?.find((l) => l.code === code)?.name ?? code;
+function capDefaultLang() {
+  const mine = (navigator.language || "en").toLowerCase().split("-")[0];
+  const code = { nb: "no", nn: "no", fil: "tl", iw: "he" }[mine] ?? mine;
+  return capSetup?.languages?.some((l) => l.code === code) ? code : "en";
+}
+function renderCapLangs() {
+  if (!capSetup?.languages) return;
+  $("#cap_lang").innerHTML = `<option value="auto">Detect automatically</option>` + capSetup.languages.map((l) => `<option value="${l.code}">${esc(l.name)}</option>`).join("");
+  $("#cap_lang").value = capLang();
+}
+// What has to download before this language can be heard, said in words; "" when nothing does.
+function capFetchNote() {
+  const m = capSetup?.models, mb = capSetup?.download_mb, l = capLang();
+  if (!m) return "";
+  if (l === "en") return m.english ? "" : `Getting the speech model for English (${mb.english} MB, one time only), then listening to the video…`;
+  if (l === "auto" && !m.detect) return `Getting a small model that recognises the language (${mb.detect} MB, one time only), then listening to the video…`;
+  if (l === "auto") return m.english && m.other ? "" : `Listening to the video… The first time a language turns up, its speech model downloads first, one time only (${mb.english} MB for English, ${mb.other} MB for any other language).`;
+  return m.other ? "" : `Getting the speech model for ${capLangName(l)} (${mb.other} MB, one time only; a few minutes on a slow connection), then listening to the video…`;
+}
 function capOpts() {
-  const c = S.captions, o = { video: c.video.path, style: c.style, position: c.position, size: capSize() };
+  const c = S.captions, o = { video: c.video.path, style: c.style, position: c.position, size: capSize(), language: capLang() };
   if (CAP_COLORS[c.style]) o.color = capColor(c.style);
   o.letters = capLetters(c.style);
   const t = $("#cap_text").value;
@@ -883,6 +907,8 @@ async function capReady() {
   if (capSetup?.ready) return true;
   try { capSetup = await api("caption_setup"); } catch (err) { toast(err.message, true); return false; }
   const s = capSetup;
+  if (!S.captions.language) { S.captions.language = capDefaultLang(); save(); }
+  renderCapLangs();
   $("#cap_setup").innerHTML = s.ready ? "" : `<div class="hint" style="margin:0 0 18px"><b>One-time setup.</b> To hear the words, captions need whisper.cpp, a free program, on ${PLACE.computer}: ${esc(s.whisper_hint)}
     <div class="rowbtns" style="margin-top:10px"><button class="btn small ghost" id="cap_recheck" type="button">I've installed it, check again</button></div></div>`;
   return s.ready;
@@ -895,15 +921,15 @@ async function setCapVideo(v) {
 async function capListen() {
   const c = S.captions;
   if (!c.video || !guard() || !(await capReady())) return;
-  // The very first time, the speech model downloads before anything can be heard.
-  showPreview(null, capSetup?.model ? "Listening to the video…" : "Getting the speech model (148 MB, one time only), then listening to the video…");
+  // The first time in a language, its speech model downloads before anything can be heard.
+  showPreview(null, capFetchNote() || "Listening to the video…");
   $("#cap_textNote").textContent = "";
   try {
-    const out = await api("transcribe", { video: c.video.path });
-    if (capSetup) capSetup.model = out.model;
+    const out = await api("transcribe", { video: c.video.path, language: capLang(), words: false });
+    api("caption_setup").then((s) => { capSetup = s; }, () => {});
     capHeard = out.text; capFor = c.video.path;
     $("#cap_text").value = c.text || out.text;
-    $("#cap_textNote").textContent = `· ${out.words} words heard`;
+    $("#cap_textNote").textContent = `· ${out.word_count} words heard${capLang() === "auto" ? ` in ${capLangName(out.language)}` : ""}`;
     await capPreview();
   } catch (err) { showPreview(null, err.message, true); }
 }
@@ -922,6 +948,12 @@ function capPreviewSoon(ms = 350) { clearTimeout(capTimer); capTimer = setTimeou
 $("#cap_styles").addEventListener("click", (e) => { const b = e.target.closest("[data-capstyle]"); if (!b) return; S.captions.style = b.dataset.capstyle; save(); renderCaptions(); capPreviewSoon(); });
 $("#cap_colors").addEventListener("click", (e) => { const b = e.target.closest("[data-capcolor]"); if (!b) return; (S.captions.colors ??= {})[S.captions.style] = b.dataset.capcolor; save(); renderCaptions(); capPreviewSoon(); });
 $("#cap_video").addEventListener("click", (e) => { if (!e.target.closest("#cap_clear")) return; S.captions.video = null; S.captions.text = ""; save(); capHeard = ""; capFor = ""; $("#cap_text").value = ""; $("#cap_textNote").textContent = ""; showPreview(null); renderCaptions(); });
+$("#cap_lang").addEventListener("change", (e) => {
+  // Corrections were made against the words heard in the old language, so they go too.
+  S.captions.language = e.target.value; S.captions.text = ""; save();
+  capHeard = ""; capFor = ""; $("#cap_text").value = ""; $("#cap_out").innerHTML = "";
+  capListen();
+});
 $("#cap_up").onclick = () => { pickTarget = { kind: "capvideo", i: 0 }; $("#file").accept = "video/*"; $("#file").click(); };
 $("#cap_film").onclick = () => openFilms("captions");
 $("#cap_pathgo").onclick = () => { const p = $("#cap_path").value.trim().replace(/^["']|["']$/g, ""); if (!p) return; $("#cap_path").value = ""; setCapVideo({ path: p, name: p.split(/[\\/]/).pop() }); };

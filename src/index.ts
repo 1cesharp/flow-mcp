@@ -300,7 +300,7 @@ server.registerTool(
   {
     title: "Hear the words in a video or audio file",
     description:
-      "Transcribe a video or audio file on this computer with every word's start and end time (whisper.cpp, local and free; the first call downloads a 148 MB speech model once). Use the times to check a take said the right words and to cut lines out of it for flow_assemble's voice_lines.",
+      "Transcribe a video or audio file on this computer with every word's start and end time (whisper.cpp, local and free, about 100 languages; pass `language` when you know it. The first call in English downloads a 148 MB speech model once, in any other language a 574 MB one). Use the times to check a take said the right words and to cut lines out of it for flow_assemble's voice_lines.",
     inputSchema: shapes.transcribe,
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
@@ -312,7 +312,7 @@ server.registerTool(
   {
     title: "Add captions to a video",
     description:
-      "Burn spoken-word captions into a video, in the style short-form apps use, for landscape or vertical footage (local and free: whisper.cpp hears the words on this computer, nothing is uploaded). Styles: bold (big capitals, the spoken word lights up), highlight, reveal, clean, boxed. The first call on a computer downloads a 148 MB speech model once. Saves <name>-captions.mp4 plus an .srt, and returns the transcript: if a word was misheard, call again with the corrected `text` - matching words keep their timing.",
+      "Burn spoken-word captions into a video, in the style short-form apps use, for landscape or vertical footage (local and free: whisper.cpp hears the words on this computer, nothing is uploaded). Styles: bold (big capitals, the spoken word lights up), highlight, reveal, clean, boxed. Works in about 100 languages, including ones written without spaces (Japanese, Chinese, Thai) and right to left (Arabic, Hebrew); pass `language` (en, es, tr, ja...) whenever you know it. The first call downloads a speech model once: 148 MB for English, 574 MB for other languages. Saves <name>-captions.mp4 plus an .srt, and returns the transcript: if a word was misheard, call again with the corrected `text` - matching words keep their timing.",
     inputSchema: shapes.captions,
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   },
