@@ -28,7 +28,8 @@ export const GEMINI_VOICES = [
   { name: "Sadaltager", description: "knowledgeable" }, { name: "Sulafat", description: "warm" },
 ];
 
-// Real keys look like "AIza..." and are ~39 chars; anything shorter or still holding template text is not a key.
+// A key is one unbroken run of characters - older AI Studio keys start "AIza", newer ones "AQ" (2026-10). Anything
+// shorter or still holding template text is not a key.
 export const geminiKey = (): string | undefined => {
   const key = (process.env.GEMINI_API_KEY ?? (existsSync(KEY_FILE) ? readFileSync(KEY_FILE, "utf8") : "")).trim();
   if (!key || key.length < 20 || /^(YOUR|PASTE|<|\$)/i.test(key) || /_KEY|KEY_HERE|EXAMPLE/i.test(key)) return undefined;
@@ -41,8 +42,10 @@ export const geminiKey = (): string | undefined => {
 // and spends no text-to-speech quota.
 export async function saveGeminiKey(raw: string): Promise<{ saved: true; ending: string }> {
   const key = raw.trim();
-  if (!/^AIza[0-9A-Za-z_-]{30,}$/.test(key)) {
-    throw new Error("That doesn't look like a Google AI Studio key. Real keys start with AIza and are about 39 characters long.");
+  // Only the shape is checked here (Google moved new keys from "AIza..." to "AQ..." in October 2026, and a prefix
+  // check refused them); whether the key WORKS is decided by Google itself just below.
+  if (!/^[A-Za-z0-9._~+/=-]{20,512}$/.test(key) || /^(YOUR|PASTE|<|\$)/i.test(key) || /_KEY|KEY_HERE|EXAMPLE/i.test(key)) {
+    throw new Error("That doesn't look like a Google AI Studio key. Copy the whole key from aistudio.google.com/apikey, with no spaces.");
   }
   const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", { headers: { "x-goog-api-key": key } }).catch(() => null);
   if (!res) throw new Error("Couldn't reach Google to check the key. Check your internet connection and try again.");
@@ -67,7 +70,7 @@ export async function speakWithGemini(text: string, voice: string, target: strin
         ? `The key file still holds placeholder text, not a key.\n\n`
         : `No Gemini key yet.\n\n`) +
         `1. Open aistudio.google.com/apikey and click "Create API key".\n` +
-        `2. Copy it — it starts with AIza and is about 39 characters.\n` +
+        `2. Copy the whole key (older keys start with AIza, newer ones with AQ).\n` +
         `3. Paste it into Flow Studio: Voice tab -> Google AI Studio key -> Save key. It is checked with Google and saved\n` +
         `   only on this computer - never paste it into a chat.`,
     );

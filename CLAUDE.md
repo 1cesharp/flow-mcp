@@ -300,6 +300,10 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   key passes a format check AND Google accepts it (models list, key in a header, no TTS quota), so a bad paste can
   never replace a working key. set_key is deliberately NOT an MCP tool - a key typed into the panel never reaches
   Claude. Tested only on the rejection path, so the user's real key was never overwritten.
+- Key format (2026-10-13): new Google AI Studio keys start "AQ" instead of "AIza", and saveGeminiKey's prefix check
+  (^AIza...) refused them in the panel. It now checks only the shape (20-512 key characters, no spaces, no template
+  text) and leaves validity to Google's own models-list check. Both requests send the key in the x-goog-api-key header,
+  which is format-agnostic. Privacy scans before a push must look for AQ-style keys as well as AIza ones.
 - CROSS-PLATFORM (2026-10-02): every OS difference lives in src/platform.ts - COMPUTER/BIN wording, moveToBin (Mac:
   rename into ~/.Trash; Windows: PowerShell Microsoft.VisualBasic ...SendToRecycleBin; Linux: `gio trash`, else
   ~/.local/share/Trash/files), extractZip (`tar` is bsdtar on macOS and Windows 10+ and reads ZIPs; `unzip` fallback),
