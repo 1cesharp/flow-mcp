@@ -112,12 +112,18 @@ input:focus,select:focus,textarea:focus{border-color:var(--tally)}
 .gal figure:hover{border-color:var(--tally)}
 .gal video,.gal img{display:block;width:100%;aspect-ratio:1;object-fit:cover}
 .gal figcaption{padding:6px 8px;font:700 13px var(--mono);color:var(--bone);background:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#viewer video,#viewer img{width:100%;max-height:74vh;object-fit:contain;border-radius:12px;background:#000}
+/* The buttons sit on top, and every clip and still fits the same fixed frame below them, so the viewer is the same
+   size whatever is open and nothing can push the buttons off screen. */
+#viewer{width:min(960px,calc(100vw - 24px));max-height:96vh;max-height:96dvh}
+#viewer .viewbar{display:flex;gap:8px;justify-content:space-between;align-items:center;margin-bottom:10px}
+#viewerBody{height:min(calc(96vh - 150px),720px);height:min(calc(96dvh - 150px),720px);border-radius:10px;background:#000;overflow:hidden}
+#viewer video,#viewer img{display:block;width:100%;height:100%;object-fit:contain}
+#viewerPath{margin-top:8px;font-size:14px;word-break:break-all;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .lib{display:grid;gap:6px;max-height:420px;overflow:auto;margin-top:10px}
 .lib button{display:flex;gap:10px;align-items:center;justify-content:space-between;text-align:left;min-height:44px;padding:8px 12px;font:500 17px var(--body);color:var(--bone);background:var(--ink);border:2px solid var(--line);border-radius:10px;cursor:pointer}
 .lib button:hover{border-color:var(--tally)} .lib button.on{border-color:var(--go)}
 .lib em{font:700 14px var(--mono);font-style:normal;color:var(--dim);text-transform:uppercase}
-dialog{width:min(640px,calc(100vw - 24px));max-height:86vh;border:2px solid var(--line);border-radius:14px;background:var(--ink2);color:var(--bone);padding:16px}
+dialog{margin:auto;width:min(640px,calc(100vw - 24px));max-height:86vh;border:2px solid var(--line);border-radius:14px;background:var(--ink2);color:var(--bone);padding:16px}
 dialog::backdrop{background:rgba(0,0,0,.7)}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:60;max-width:calc(100vw - 32px);padding:12px 18px;border-radius:10px;background:var(--bone);color:var(--ink);font-weight:700;font-size:17px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
 .toast.bad{background:var(--bad);color:#fff}
@@ -363,7 +369,7 @@ audio{width:100%;margin-top:8px;filter:invert(1) hue-rotate(180deg)}
 </div></div>
 
 <dialog id="picker"><h2 style="font-size:34px">Pick from Flow</h2><p class="empty">Media already in the open Flow project.</p><div class="lib" id="pickList"></div><div style="margin-top:16px"><button class="btn small ghost" onclick="picker.close()">Close</button></div></dialog>
-<dialog id="viewer"><div id="viewerBody"></div><p class="empty" id="viewerPath" style="margin:12px 0;word-break:break-all"></p><div class="rowbtns"><button class="btn small ghost" onclick="viewer.close()">Close</button><button type="button" class="btn small ghost" id="viewerTrash" style="border-color:var(--bad);color:var(--bad)">Move to <span data-place="bin">the Mac's Trash</span></button></div></dialog>
+<dialog id="viewer"><div class="viewbar"><button type="button" class="btn small ghost" id="viewerTrash" style="border-color:var(--bad);color:var(--bad)">Move to <span data-place="bin">the Mac's Trash</span></button><button type="button" class="btn small" onclick="viewer.close()" autofocus>Close</button></div><div id="viewerBody"></div><p class="empty" id="viewerPath"></p></dialog>
 <input type="file" id="file" hidden>
 <script>
 const TOKEN = "__FLOW_TOKEN__";
@@ -878,7 +884,7 @@ $("#gal").addEventListener("click", (e) => {
   const fig = e.target.closest("figure"); if (!fig) return;
   const f = GAL.find((x) => x.name === $("#galProject").value).files[+fig.dataset.n];
   $("#viewerBody").innerHTML = f.kind === "video" ? `<video controls autoplay playsinline src="${media(f.path)}"></video>` : `<img src="${media(f.path)}">`;
-  $("#viewerPath").textContent = f.path; viewer.showModal();
+  $("#viewerPath").textContent = f.path; $("#viewerPath").title = f.path; viewer.showModal();
 });
 $("#viewer").addEventListener("close", () => ($("#viewerBody").innerHTML = ""));
 // Files on this computer: moved to its own bin (Mac Trash, Windows Recycle Bin), so anything removed by mistake can be put back.

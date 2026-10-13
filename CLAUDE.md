@@ -360,3 +360,8 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   are 23-35% shorter on a phone. It also fixed a sideways scroll: at 390 px wide the old page was 427 px (checked with
   a headless shot); every tab now fits at 375 px. Re-check with full-page headless shots per tab at 390 and 1440 wide
   and an overflow scan (elements whose right edge passes the viewport, tabs row excluded).
+- GALLERY VIEWER (2026-10-13): Close and Move to Trash sat UNDER the media, and a tall clip (74vh) plus a wrapped path
+  pushed them off screen. They are now a bar on top, and every clip and still plays in one fixed black frame
+  (min(96dvh - 150px, 720px) tall, 960 px wide max, object-fit contain), so the viewer is the same size whatever is
+  open. Dialogs were also stuck in the top-left corner: the `*{margin:0}` reset kills <dialog>'s centring, so dialog
+  has margin:auto again. Close carries autofocus; showModal otherwise focused the red Trash button.
