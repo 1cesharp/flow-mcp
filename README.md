@@ -240,6 +240,13 @@ key → Save key**. It's checked with Google before it's saved, and stored only 
 
 ---
 
+## Updating
+
+Tell your assistant: *"Update Flow MCP: in my flow-mcp folder, run git pull, then npm install, then npm run
+build."* Then fully quit and reopen your assistant app so it loads the new version.
+
+---
+
 ## Licence and risk
 
 This automates Flow's web interface. It can break whenever Google changes that interface, and

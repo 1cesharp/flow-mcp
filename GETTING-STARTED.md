@@ -210,7 +210,8 @@ Voice, Restyle, Cut.
 
 ## Updating
 
-Ask your assistant: *"Update Flow MCP."* Or in the `flow-mcp` folder:
+Tell your assistant: *"Update Flow MCP: in my flow-mcp folder, run git pull, then npm install, then npm run
+build."* Or run them yourself in the `flow-mcp` folder:
 
 ```bash
 git pull
