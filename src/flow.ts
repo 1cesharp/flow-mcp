@@ -42,9 +42,48 @@ export async function getFlowState(detailed = false): Promise<FlowState> {
 
 // Menus close on Escape; the account panel does not and needs its own close button.
 async function dismissOverlays(page: Page): Promise<void> {
+  await leaveSideMenu(page);
   await page.keyboard.press("Escape");
   const closePanel = page.getByRole("button", { name: "Close account panel" });
   if (await closePanel.isVisible().catch(() => false)) await closePanel.click({ timeout: 5000 }).catch(() => {});
+  await clearBackdrops(page);
+}
+
+// Some of Flow's menus ignore Escape (the agent's model menu did, 2026-10-13), and the invisible backdrop behind an
+// open menu ("cdk-overlay-backdrop settings-menu-backdrop") then swallows every click on the page: that is how an agent
+// batch failed with "Could not switch Agent mode on". Clicking the backdrop is how such a menu closes, picking nothing.
+async function clearBackdrops(page: Page): Promise<void> {
+  const showing = page.locator(".cdk-overlay-backdrop.cdk-overlay-backdrop-showing");
+  for (let i = 0; i < 4 && (await showing.count().catch(() => 0)); i++) {
+    await showing.last().click({ force: true, timeout: 4000 }).catch(() => {});
+    await pause(page, 500);
+  }
+}
+
+// The agent's own image model, set to the newest Nano Banana like single images. Best effort: a batch never fails over it.
+async function pickAgentImageModel(page: Page): Promise<void> {
+  const button = page.locator("flow-agent-panel").getByRole("button", { name: "Image generation default model" });
+  if (!(await button.isVisible().catch(() => false))) return;
+  await button.click({ timeout: 5000 }).catch(() => {});
+  const items = page.getByRole("menuitem");
+  if (!(await items.first().isVisible().catch(() => false))) await items.first().waitFor({ state: "visible", timeout: 4000 }).catch(() => {});
+  const names = (await items.allInnerTexts().catch(() => [] as string[])).map((t) => t.replace(/\s+/g, " ").trim());
+  const index = newestNanoBanana(names);
+  const shown = (await button.innerText().catch(() => "")).replace(/\s+/g, " ");
+  if (index >= 0 && !shown.includes(names[index])) await items.nth(index).click({ timeout: 4000 }).catch(() => {});
+  else await page.keyboard.press("Escape");
+  await pause(page, 400);
+  await clearBackdrops(page);
+}
+
+// The agent settings panel replaces the composer, hiding the Agent button; Back closes it without saving.
+async function closeAgentSettings(page: Page): Promise<void> {
+  const back = page.locator("flow-agent-panel").getByRole("button", { name: "Back", exact: true });
+  if (await back.isVisible().catch(() => false)) {
+    await clearBackdrops(page);
+    await back.click({ timeout: 5000 }).catch(() => {});
+    await pause(page, 800);
+  }
 }
 
 // The balance only shows inside the account panel. That panel also holds "Sign out": never touch anything else in it.
@@ -262,17 +301,41 @@ async function pickRadio(page: Page, name: string | RegExp): Promise<void> {
   }
 }
 
+// Image jobs use the newest Nano Banana unless another model is named (the user's call, 2026-10-13: "should always
+// default to latest"). The menu then held Nano Banana Pro, 2 Lite and 2.1 - the plain "Nano Banana 2" was gone, and
+// asking for it by name picked whichever came first. The newest is the highest version number that is not a Lite model,
+// read from Flow's own menu, so a later 2.2 or 3 is picked with no code change.
+export const LATEST_IMAGE_MODEL = "latest";
+const LEGACY_IMAGE_MODEL = /^\s*(nano banana( 2)?|latest)?\s*$/i;
+export function newestNanoBanana(names: string[]): number {
+  const version = (n: string) => /nano banana\s+(\d+(?:\.\d+)*)/i.exec(n)?.[1]?.split(".").map(Number);
+  let best = -1;
+  names.forEach((n, i) => {
+    const v = version(n);
+    if (!v || /\blite\b/i.test(n)) return;
+    const b = best < 0 ? undefined : version(names[best])!;
+    const newer = !b || v.some((x, k) => x !== (b[k] ?? 0) && v.slice(0, k).every((y, j) => y === (b[j] ?? 0)) && x > (b[k] ?? 0));
+    if (newer) best = i;
+  });
+  return best;
+}
+
 async function pickModel(page: Page, model: string): Promise<void> {
   const button = page.getByRole("button", { name: "Select model family" });
-  if ((await button.innerText()).toLowerCase().includes(model.toLowerCase())) return;
+  const latest = model === LATEST_IMAGE_MODEL;
+  if (!latest && (await button.innerText()).toLowerCase().includes(model.toLowerCase())) return;
   await button.click();
   const items = page.getByRole("menuitem");
   await items.first().waitFor({ state: "visible", timeout: 5000 });
   const names = (await items.allInnerTexts()).map((t) => t.replace(/\s+/g, " ").trim());
-  const index = names.findIndex((n) => n.toLowerCase().includes(model.toLowerCase()));
-  if (index < 0) {
+  const index = latest ? newestNanoBanana(names) : names.findIndex((n) => n.toLowerCase().includes(model.toLowerCase()));
+  const shown = (await button.innerText()).replace(/\s+/g, " ");
+  if (index < 0 || (latest && shown.includes(names[index]))) {
+    // Nothing to change (already the newest, or no numbered Nano Banana here at all): close the menu, pick nothing.
     await page.keyboard.press("Escape");
-    throw new Error(`Model "${model}" not found. Available here: ${names.join(", ")}`);
+    await clearBackdrops(page);
+    if (index < 0 && !latest) throw new Error(`Model "${model}" not found. Available here: ${names.join(", ")}`);
+    return;
   }
   await items.nth(index).click();
   await pause(page, 700);
@@ -286,7 +349,8 @@ async function applySettings(page: Page, job: Job): Promise<number> {
   await pickRadio(page, s.type === "image" ? "Image" : "Video");
   if (s.type === "video") await pickRadio(page, framesMode ? "Frames" : "Ingredients");
   if (s.aspect_ratio) await pickRadio(page, s.aspect_ratio);
-  if (s.model) await pickModel(page, s.model);
+  const model = s.type === "image" && LEGACY_IMAGE_MODEL.test(s.model ?? "") ? LATEST_IMAGE_MODEL : s.model;
+  if (model) await pickModel(page, model);
   if (s.type === "video" && s.resolution) await pickRadio(page, new RegExp(`^${s.resolution}`));
   if (s.type === "video" && s.duration) await pickRadio(page, `${s.duration}s`);
   await pickRadio(page, `x${s.variants ?? 1}`);
@@ -605,6 +669,66 @@ async function downloadTile(page: Page, target: Locator | TileResolver, targetSt
   throw lastError;
 }
 
+// The left-hand "Project navigation" (All media, Images, Videos, Characters...). Its Collapse button (a setting Flow
+// keeps for every project) turns it into a strip of icons with no labels, and getByText("Characters") then found
+// nothing visible. Each item's text holds its icon name and its label whether or not the label shows, so it is found by
+// label in both states. (Why the menu used to vanish altogether: see leaveSideMenu.)
+async function clickProjectNav(page: Page, item: string): Promise<boolean> {
+  const button = page
+    .getByRole("navigation", { name: "Project navigation" })
+    .locator("button, a")
+    .filter({ hasText: new RegExp(`${item}\\s*$`) })
+    .first();
+  if (!(await button.isVisible().catch(() => false))) return false;
+  await button.click({ timeout: 5000 });
+  await leaveSideMenu(page);
+  return true;
+}
+
+// The left-hand menu is a Material drawer, and Escape shuts it whenever the keyboard focus is inside it. Clicking
+// "All media" left the focus there, so the very next Escape (dismissOverlays runs before almost every step) shut the
+// menu for the rest of the session: the user's menu vanished, "All media" was hidden from then on, and each later click
+// on it waited out Playwright's 30 s default (traced with DEBUG=pw:api, 2026-10-13). Take the focus out first.
+async function leaveSideMenu(page: Page): Promise<void> {
+  await page
+    .evaluate(() => {
+      const focused = document.activeElement as HTMLElement | null;
+      if (focused?.closest("mat-sidenav")) focused.blur();
+    })
+    .catch(() => {});
+}
+async function openProjectNav(page: Page, item: string): Promise<void> {
+  if (await clickProjectNav(page, item)) return;
+  // A page load shows the menu again in whatever state the user keeps it, and changes nothing about that choice.
+  await page.goto(inEnglish(page.url()), { waitUntil: "domcontentloaded" });
+  await pause(page, 3000);
+  if (!(await clickProjectNav(page, item))) throw new Error(`Flow's left-hand menu is not showing, so "${item}" could not be opened. Show the menu in the Flow window and try again.`);
+}
+
+// All media: through the left-hand menu when it shows. When it does not (collapsed and scrolled away), the top bar's
+// Filter menu does the same job: nothing ticked, newest first. `thorough` (the start of a job) checks that menu; a
+// plain grid scan does not, so a hidden menu costs nothing.
+async function showAllMedia(page: Page, thorough = false): Promise<void> {
+  if (await clickProjectNav(page, "All media").catch(() => false)) return;
+  const filter = page.getByRole("button", { name: "Filtering and sorting options" });
+  if (!thorough || !(await filter.isVisible().catch(() => false))) return;
+  await filter.click({ timeout: 5000 }).catch(() => {});
+  await pause(page, 600);
+  const menu = page.locator(".cdk-overlay-container");
+  if (await menu.locator("input[type=checkbox]:checked").count().catch(() => 0)) {
+    await page.getByRole("button", { name: "Clear all filters" }).click({ timeout: 4000 }).catch(() => {});
+    await pause(page, 600);
+  }
+  // New tiles must come first: everything that finds a fresh result looks at the top of the grid.
+  const newest = menu.locator("label", { hasText: /^\s*Newest\s*$/ }).locator("input[type=radio]");
+  if ((await newest.count().catch(() => 0)) && !(await newest.first().isChecked().catch(() => true))) {
+    await newest.first().click({ force: true, timeout: 4000 }).catch(() => {});
+    await pause(page, 600);
+  }
+  await page.keyboard.press("Escape");
+  await clearBackdrops(page);
+}
+
 async function ensureProjectGrid(page: Page): Promise<void> {
   await dismissOverlays(page);
   const root = page.url().match(/^https:\/\/[^/]+\/project\/[0-9a-f-]{36}/)?.[0];
@@ -613,7 +737,7 @@ async function ensureProjectGrid(page: Page): Promise<void> {
     await page.goto(inEnglish(root), { waitUntil: "domcontentloaded" });
     await pause(page, 2500);
   }
-  await page.getByRole("navigation", { name: "Project navigation" }).getByText("All media", { exact: true }).click().catch(() => {});
+  await showAllMedia(page, true);
   await pause(page, 800);
   await scrollToTop(page);
 }
@@ -701,7 +825,7 @@ export interface FlowAsset {
 // media id yet, so entries are keyed by title and the id is filled in from whichever pass saw it.
 async function scanGrid(page: Page, stopAt?: (assets: FlowAsset[]) => boolean): Promise<FlowAsset[]> {
   await dismissOverlays(page);
-  await page.getByRole("navigation", { name: "Project navigation" }).getByText("All media", { exact: true }).click().catch(() => {});
+  await showAllMedia(page);
   await pause(page, 600);
   await scrollToTop(page);
   const seen = new Map<string, FlowAsset>();
@@ -744,7 +868,7 @@ export async function listCharacters(): Promise<string[]> {
   if (!state.signedIn || !state.inProject) throw new Error(state.hint);
   const page = await getFlowPage();
   await dismissOverlays(page);
-  await page.getByRole("navigation", { name: "Project navigation" }).getByText("Characters", { exact: true }).click();
+  await openProjectNav(page, "Characters");
   await pause(page, 2500);
   const names = await page.evaluate(() =>
     [...document.querySelectorAll("flow-character-tile")].map((t) => (t as HTMLElement).innerText.replace(/\s+/g, " ").trim()).filter(Boolean),
@@ -801,7 +925,7 @@ export async function editCharacter(name: string, change?: string, job?: Job): P
   const page = await getFlowPage();
   await leaveCharacterEditor(page);
   await dismissOverlays(page);
-  await page.getByRole("navigation", { name: "Project navigation" }).getByText("Characters", { exact: true }).click();
+  await openProjectNav(page, "Characters");
   await pause(page, 2500);
 
   const card = page.locator("flow-character-tile").filter({ hasText: name }).first();
@@ -987,7 +1111,7 @@ export async function createCharacter(c: CharacterParams, job?: Job): Promise<{ 
   await dismissOverlays(page);
   await scrollToTop(page);
 
-  await page.getByRole("navigation", { name: "Project navigation" }).getByText("Characters", { exact: true }).click();
+  await openProjectNav(page, "Characters");
   await pause(page, 1500);
   // With no characters yet Flow jumps straight to the creation page.
   const create = page.getByRole("button", { name: "New character" });
@@ -1049,7 +1173,7 @@ export async function createCharacter(c: CharacterParams, job?: Job): Promise<{ 
   // Flow drops the new character into the composer; leave the composer empty for the next job.
   const clear = page.getByRole("button", { name: "Clear prompt" });
   if (await clear.isVisible().catch(() => false)) await clear.click();
-  await page.getByRole("navigation", { name: "Project navigation" }).getByText("All media", { exact: true }).click().catch(() => {});
+  await showAllMedia(page);
   if (c.describe) rememberCharacter(c.name, c.describe);
   return { name: c.name, url, portrait };
 }
@@ -1123,28 +1247,45 @@ export async function runEdit(job: Job): Promise<string[]> {
 // confirms the toggle actually landed rather than assuming the click worked.
 async function setAgentMode(page: Page, on: boolean): Promise<void> {
   const agent = page.getByRole("button", { name: "Agent", exact: true });
+  // Playwright says why a click did not land ("<div ...> intercepts pointer events", "element is not visible"); keep
+  // that, so a failure names what was in the way instead of guessing.
+  let why = "";
   for (let attempt = 0; attempt < 3; attempt++) {
+    await clearBackdrops(page);
+    await closeAgentSettings(page);
     if (((await agent.getAttribute("aria-pressed").catch(() => null)) === "true") === on) return;
-    await agent.click({ timeout: 8000 }).catch(() => {});
+    await agent.click({ timeout: 8000 }).catch((err: Error) => {
+      const lines = err.message.split("\n").map((l) => l.trim());
+      why = (lines.find((l) => /intercepts pointer events|not visible|not enabled|detached|not stable/.test(l)) ?? lines[0]).slice(0, 200);
+    });
     await pause(page, 1500);
   }
   if (((await agent.getAttribute("aria-pressed").catch(() => null)) === "true") !== on) {
-    throw new Error(`Could not switch Agent mode ${on ? "on" : "off"}; the composer may be covered by the agent session panel.`);
+    throw new Error(`Could not switch Agent mode ${on ? "on" : "off"}${why ? ` (${why})` : "; the click landed but the toggle did not change"}.`);
   }
 }
 
 // "Never" lets the agent generate without asking; it is switched back to "Always" as soon as the batch ends.
 async function setAgentSettings(page: Page, confirm: "Always" | "Never", imageAspect?: string): Promise<void> {
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("heading", { name: "Agent settings" }).waitFor({ state: "visible", timeout: 8000 });
-  await page.getByRole("radio", { name: new RegExp(`^${confirm}`) }).click();
-  if (imageAspect) {
-    await page.getByRole("radio", { name: imageAspect, exact: true }).first().click();
-    await page.getByRole("radio", { name: "x1", exact: true }).first().click();
+  // Scoped to the prompt box: Flow added a second "Settings" button to the top bar ("View settings", seen 2026-10-13),
+  // and an unscoped lookup matched both and failed every agent batch.
+  await clearBackdrops(page);
+  await page.locator("flow-base-prompt-box").getByRole("button", { name: "Settings", exact: true }).click();
+  try {
+    await page.getByRole("heading", { name: "Agent settings" }).waitFor({ state: "visible", timeout: 8000 });
+    await page.getByRole("radio", { name: new RegExp(`^${confirm}`) }).click();
+    if (imageAspect) {
+      await page.getByRole("radio", { name: imageAspect, exact: true }).first().click();
+      await page.getByRole("radio", { name: "x1", exact: true }).first().click();
+      await pickAgentImageModel(page);
+    }
+    await pause(page, 300);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await pause(page, 1200);
+  } finally {
+    // Saved or not, never leave the panel covering the composer: the next step needs the Agent button.
+    await closeAgentSettings(page);
   }
-  await pause(page, 300);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await pause(page, 1200);
 }
 
 // "Reuse prompt" on an agent-made tile opens the agent's session panel, which hides the normal composer.
@@ -1201,6 +1342,15 @@ interface RoundOutcome {
 
 // One pass through Flow's agent for the given scene numbers: ask, wait, match the new tiles back to those scenes
 // and download them. Returns how many scenes it actually delivered.
+// Progress the panel and flow_wait show; with FLOW_MCP_DEBUG set, also a timed line on stderr to find slow steps.
+const t0s = new WeakMap<Job, number>();
+function step(job: Job, text: string | undefined): void {
+  job.progress = text;
+  if (!process.env.FLOW_MCP_DEBUG || !text) return;
+  if (!t0s.has(job)) t0s.set(job, Date.now());
+  console.error(`[flow-mcp ${job.id}] ${((Date.now() - t0s.get(job)!) / 1000).toFixed(1)}s ${text}`);
+}
+
 async function agentRound(
   page: Page,
   job: Job,
@@ -1243,7 +1393,7 @@ async function agentRound(
     const main = await page.locator("main").first().innerText();
     const pending = main.match(/\d+%/g) ?? [];
     const working = pending.length > 0 || (await stop.isVisible().catch(() => false));
-    job.progress = working ? `${pending.length} rendering` : undefined;
+    step(job, working ? (pending.length ? `${pending.length} rendering` : "the agent is working") : "the agent has finished");
     if (working) idleSince = 0;
     else if (!idleSince) idleSince = Date.now();
     else if (Date.now() - idleSince > 8000) break;
@@ -1256,6 +1406,7 @@ async function agentRound(
     }
   }
 
+  step(job, "checking for failed tiles");
   const failedTiles = await retryNewErrorTiles(page, before, true)
     .then((r) => r.errors)
     .catch(() => 0);
@@ -1264,7 +1415,8 @@ async function agentRound(
   // Tiles finish in any order and the agent rewords prompts, so each image is matched back to its scene by the
   // prompt Flow stored for it ("Reuse prompt" puts that text in the composer).
   const prompts: string[] = [];
-  for (const tile of fresh) {
+  for (const [k, tile] of fresh.entries()) {
+    step(job, `matching image ${k + 1} of ${fresh.length} to its scene`);
     await scanGrid(page, (seen) => seen.some((x) => x.id === tile.id));
     const el = mediaTile(page, tile.id!);
     await el.scrollIntoViewIfNeeded();
@@ -1290,6 +1442,7 @@ async function agentRound(
       const id = fresh[tileIndex].id!;
       await scanGrid(page, (seen) => seen.some((x) => x.id === id));
       const stem = join(s.output_dir, `scene-${String(base + sceneIndex).padStart(2, "0")}${v ? `-v${v + 1}` : ""}`);
+      step(job, `downloading scene ${sceneIndex + 1}`);
       files.push(...(await downloadTile(page, mediaTile(page, id), stem, s.download_quality ?? "original")));
       await pause(page, 800);
     }
@@ -1432,8 +1585,11 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
   let agentTimedOut = false;
   let failedTiles = 0;
   let agentRetries = 0;
+  let agentProblem = "";
   try {
+    step(job, "switching Agent mode on");
     await setAgentMode(page, true);
+    step(job, "setting the agent to generate without asking");
     await setAgentSettings(page, "Never", s.aspect_ratio ?? "16:9");
     for (let round = 0; round < 3; round++) {
       const todo = scenes.map((_, i) => i).filter((i) => !done.has(i));
@@ -1447,7 +1603,13 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
       failedTiles = out.failedTiles;
       if (!out.produced) break; // the agent delivered nothing this round: stop asking it
     }
+  } catch (err) {
+    // Agent mode could not be used (2026-10-13: "Could not switch Agent mode on" failed a whole 11-image batch with
+    // nothing made). Whatever the agent did not deliver is made one by one below instead: slower, but the batch still
+    // ends with every image.
+    agentProblem = (err as Error).message;
   } finally {
+    step(job, "putting the agent settings back");
     await ensureProjectGrid(page).catch(() => {});
     await closeAgentSession(page).catch(() => {});
     await setAgentMode(page, true).catch(() => {});
@@ -1486,9 +1648,12 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
     }
     if (!ok) failed.push(i + 1);
   }
-  job.progress = undefined;
+  step(job, "reading the credit balance");
+  const left = await readCredits(page).catch(() => undefined);
+  step(job, undefined);
   files.sort();
   job.note = [
+    agentProblem ? `agent mode failed (${agentProblem}), so the images were made one by one` : "",
     agentTimedOut ? "the agent stalled and was stopped" : "",
     `${done.size} of ${scenes.length} scenes came from the agent`,
     agentRetries ? `${agentRetries} asked again` : "",
@@ -1500,7 +1665,6 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
     .join(" · ");
   if (!files.length) throw new Error("No image could be generated for any scene. Open the Flow tab to see what Flow reported.");
 
-  const left = await readCredits(page).catch(() => undefined);
   if (balance !== undefined && left !== undefined) job.credits = balance - left;
   return files;
 }

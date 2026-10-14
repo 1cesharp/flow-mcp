@@ -367,3 +367,34 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   (min(96dvh - 150px, 720px) tall, 960 px wide max, object-fit contain), so the viewer is the same size whatever is
   open. Dialogs were also stuck in the top-left corner: the `*{margin:0}` reset kills <dialog>'s centring, so dialog
   has margin:auto again. Close carries autofocus; showModal otherwise focused the red Trash button.
+- AGENT BATCHES + THE LEFT-HAND MENU (2026-10-13). An 11-image flow_agent_images run in another session failed at
+  once with "Could not switch Agent mode on" and made nothing. Flow was NOT redesigned (I first claimed it was; the
+  user corrected me): the left "Project navigation" (All media, Images, Videos, Characters, Scenes, Uploads, Tools,
+  Trash, Collapse) is where it always was. What was found, live:
+  1. ESCAPE SHUTS THE LEFT MENU. It is a Material drawer (mat-sidenav), and Escape closes it whenever the keyboard focus
+     is inside it. Clicking "All media" left the focus there, so the next dismissOverlays Escape shut the menu for the
+     rest of the session (the user's menu vanished; traced with DEBUG=pw:api plus a second connection watching the
+     menu). "All media" was then hidden and every later click on it waited out Playwright's 30 s default: a 3-image
+     agent batch took 6.4 min. leaveSideMenu() blurs the focus after each menu click and before every dismissOverlays
+     Escape. A page load restores the drawer to the saved state (localStorage flow-sidenav-collapsed, shared by every
+     project in that Chrome).
+  2. Collapse turns the menu into a strip of icons with no labels; getByText found nothing visible. clickProjectNav()
+     matches the button by its text, which holds icon name and label in both states; openProjectNav() reloads once if
+     the menu still is not showing. showAllMedia() falls back to the top bar's Filter menu (`Filtering and sorting
+     options`: tick boxes, `Clear all filters`, Sort by Newest/Oldest) only when the menu cannot be used.
+  3. The top bar also has a gear `Settings` ("View settings": Grid/Batch layout, tile size, toggles), so an unscoped
+     getByRole("button", { name: "Settings" }) matched it AND the agent's Settings: strict-mode error. Scoped to
+     `flow-base-prompt-box`.
+  4. Some menus ignore Escape (the agent panel's model menu did) and leave `cdk-overlay-backdrop settings-menu-backdrop`
+     over the page, swallowing every click, the Agent chip's included. dismissOverlays clicks showing backdrops away
+     (closes the menu, picks nothing); setAgentMode clears them and closes the agent settings panel (`flow-agent-panel`
+     -> `Back`; Escape does not close it, and while open it hides the Agent chip) before each try, and its error quotes
+     what intercepted the click. If agent mode still cannot be used, every scene goes the one-by-one route.
+  Progress names each step; FLOW_MCP_DEBUG=1 prints timed steps on stderr. Image models are now Nano Banana Pro,
+  Nano Banana 2 Lite and Nano Banana 2.1 (all 0 credits at x1); plain "Nano Banana 2" is gone. The user's call: images
+  ALWAYS default to the newest; newestNanoBanana() picks the highest version number that is not Lite from Flow's own
+  menu, for image jobs with no model, "Nano Banana" or "Nano Banana 2", and for the agent's image default.
+  Verified live, 0 credits: three 3-image batches (all from the agent, right order; 90 s each once All media stopped
+  waiting, against 6.4 min), a batch with a scene forced missing (asked again, then one by one, composer moved from
+  2 Lite to 2.1), and with the menu open and collapsed: flow_characters 6.6 s, flow_assets 5.6 s (was 15.5), the menu
+  still open afterwards. Afterwards Flow had agent mode off, confirm back on Always, no backdrop, panel closed.
