@@ -398,3 +398,9 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   waiting, against 6.4 min), a batch with a scene forced missing (asked again, then one by one, composer moved from
   2 Lite to 2.1), and with the menu open and collapsed: flow_characters 6.6 s, flow_assets 5.6 s (was 15.5), the menu
   still open afterwards. Afterwards Flow had agent mode off, confirm back on Always, no backdrop, panel closed.
+- RENAMED VIDEO NOT FOUND (2026-10-15, reported by a user of the public repo): "locator.waitFor: Timeout 30000ms
+  exceeded ... flow-grid-tile-container[aria-label="<the prompt>"]". A video tile at rest has no media id, so TILE_ID_JS
+  hands back "title:<Flow's title>"; runGeneration then renamed the tile to <project>-<stem> and asked downloadMedia
+  for the OLD title, which no longer existed. The clip was finished and renamed in Flow (credits spent, file not
+  downloaded). Now the handle follows the rename, and a tile that cannot be found again says so in words and points at
+  flow_download. Not re-run on a paid clip yet; images are unaffected (they carry data-media-id).

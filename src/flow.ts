@@ -464,7 +464,12 @@ export async function downloadMedia(page: Page, mediaId: string, targetStem: str
   await scrollToTop(page);
   await pause(page, 2500);
   const tile = mediaTile(page, mediaId);
-  await tile.waitFor({ state: "visible", timeout: 30_000 });
+  await tile.waitFor({ state: "visible", timeout: 30_000 }).catch(() => {
+    throw new Error(
+      `The finished file is in Flow but could not be found again in the grid${mediaId.startsWith("title:") ? ` (looked for "${mediaId.slice(6)}")` : ""}. ` +
+        `Nothing is lost: flow_download fetches it by its title without spending credits again.`,
+    );
+  });
   // Grab the title NOW, while the id still resolves, so the download can re-find this exact tile later even if the
   // virtualised grid unmounts and remounts it between steps.
   const title = (await tile.getAttribute("aria-label").catch(() => null)) ?? undefined;
@@ -805,11 +810,16 @@ export async function runGeneration(job: Job): Promise<string[]> {
     // Flow names clips itself and reuses those names, so two takes of one scene come back identically titled and
     // neither can be found by name afterwards. Renaming each finished tile to the scene's own file stem makes every
     // later lookup - download, continue, assemble - unambiguous. Best effort: a failed rename must not lose the clip.
-    const renamed = await renameTile(page, mediaTile(page, id), `${basename(s.output_dir)}-${label}`).catch(() => false);
-    if (renamed) job.note = [job.note, `renamed in Flow to ${basename(s.output_dir)}-${label}`].filter(Boolean).join(" · ");
+    const newTitle = `${basename(s.output_dir)}-${label}`;
+    const renamed = await renameTile(page, mediaTile(page, id), newTitle).catch(() => false);
+    if (renamed) job.note = [job.note, `renamed in Flow to ${newTitle}`].filter(Boolean).join(" · ");
     await pause(page, 800);
     const stem = join(s.output_dir, label);
-    files.push(...(await downloadMedia(page, id, stem, s.download_quality)));
+    // A video at rest has no media id, so it is tracked by its title - which the rename just changed. Looking for the
+    // old title failed every such download after 30 s ("locator.waitFor: Timeout 30000ms exceeded ... aria-label=
+    // <the prompt>", reported by a user, 2026-10-15) while the clip sat finished and renamed in Flow.
+    const handle = renamed && id.startsWith("title:") ? `title:${newTitle}` : id;
+    files.push(...(await downloadMedia(page, handle, stem, s.download_quality)));
     await pause(page, 1500);
   }
   return files;
