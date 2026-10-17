@@ -243,9 +243,11 @@ export async function freshMedia(page: Page, before: string[], kind?: MediaKind)
         id: idOf(t),
         kind: t.querySelector("flow-video-tile") ? "video" : t.querySelector("flow-image-tile") ? "image" : "other",
         label: t.getAttribute("aria-label") ?? "",
-        // After 100% Flow is still finishing a video for a moment: the tile is titled with the prompt itself and has
-        // no thumbnail yet; finished, it gets a short title of Flow's own ("3D motion graphics animation guide") and
-        // its thumbnail. Until then it counts as busy (2026-10-16, a user's clip was lost to this).
+        // For the first seconds after Start generation, before any "NN%" shows, a new video tile is titled with the
+        // prompt itself and has no thumbnail; then it takes a short title of Flow's own and counts up; finished, it
+        // has its thumbnail (watched live 2026-10-16, a 4 s clip: prompt title at 9 s, "0%" at 12 s, 100% at 34 s,
+        // thumbnail at 35 s). The old test - no "NN%" means done - took the tile in those first seconds and lost a
+        // user's clip. A video without its thumbnail counts as busy.
         busy:
           /\d+%/.test((t as HTMLElement).innerText) ||
           (!!t.querySelector("flow-video-tile") && !t.querySelector('img[alt="Generated video thumbnail"], video')),
