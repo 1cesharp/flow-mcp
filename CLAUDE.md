@@ -404,3 +404,11 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   for the OLD title, which no longer existed. The clip was finished and renamed in Flow (credits spent, file not
   downloaded). Now the handle follows the rename, and a tile that cannot be found again says so in words and points at
   flow_download. Not re-run on a paid clip yet; images are unaffected (they carry data-media-id).
+  SAME USER, AFTER UPDATING (2026-10-16): "could not be found again in the grid (looked for "<the prompt>")". The
+  real cause: right after "NN%" disappears Flow is still finishing the video - the tile is titled with the PROMPT and
+  has no thumbnail; finished, it gets a short title of Flow's own (live grid: "3D motion graphics animation guide",
+  aria-label cut with "…") plus img[alt="Generated video thumbnail"]. The tool took the tile at the provisional
+  stage, the rename failed on the unfinished tile, and the provisional title then vanished. freshMedia now counts a
+  video tile without its thumbnail (or a <video>) as busy, and waitForNewMedia takes title-tracked tiles only once
+  the same titles show on two polls running. Finished tiles still pass (6/6 in the live grid). The provisional state
+  itself has not been watched live (needs a paid clip).

@@ -243,7 +243,12 @@ export async function freshMedia(page: Page, before: string[], kind?: MediaKind)
         id: idOf(t),
         kind: t.querySelector("flow-video-tile") ? "video" : t.querySelector("flow-image-tile") ? "image" : "other",
         label: t.getAttribute("aria-label") ?? "",
-        busy: /\d+%/.test((t as HTMLElement).innerText),
+        // After 100% Flow is still finishing a video for a moment: the tile is titled with the prompt itself and has
+        // no thumbnail yet; finished, it gets a short title of Flow's own ("3D motion graphics animation guide") and
+        // its thumbnail. Until then it counts as busy (2026-10-16, a user's clip was lost to this).
+        busy:
+          /\d+%/.test((t as HTMLElement).innerText) ||
+          (!!t.querySelector("flow-video-tile") && !t.querySelector('img[alt="Generated video thumbnail"], video')),
       }));
     },
     TILE_ID_JS,
@@ -256,11 +261,21 @@ async function waitForNewMedia(page: Page, before: string[], count: number, time
   const deadline = Date.now() + timeoutMs;
   let retriesLeft = job?.params.retries ?? 1;
   let failures = 0;
+  let seen = "";
   while (Date.now() < deadline) {
     await pause(page, 2000);
     const fresh = await freshMedia(page, before, kind);
     // New tiles are listed first, so anything beyond the requested count is not ours.
-    if (fresh.length >= count) return fresh.slice(0, count);
+    if (fresh.length >= count) {
+      const picked = fresh.slice(0, count);
+      // A video has no media id and is tracked by its title, which Flow may still change right after finishing: take
+      // it only once the same titles show twice running, or the download looks for a name that no longer exists.
+      const settled = !picked.some((id) => id.startsWith("title:")) || picked.join("|") === seen;
+      if (settled) return picked;
+      seen = picked.join("|");
+      if (job) job.progress = "Flow is finishing the video";
+      continue;
+    }
     const progress = await page.evaluate(() =>
       [...document.querySelectorAll("flow-grid-tile-container")].slice(0, 8).map((t) => (t as HTMLElement).innerText.match(/\d+%/)?.[0]).filter(Boolean),
     );
