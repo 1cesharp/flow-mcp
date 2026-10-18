@@ -500,3 +500,13 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   + Detect automatically), defaulting to the browser's language when listed, else English; changing it re-listens and
   drops corrections. The panel read transcribe's `words` (now an array since flow_transcribe) as the word count; it
   now asks words:false and shows word_count.
+- NAMES IN LOWERCASE CAPTIONS (2026-10-18, the user's rule: "always capitalize names even if lower case selected").
+  namesIn(): a word written with a capital where no sentence starts (the speech model and corrections capitalise
+  names), every other occurrence of it, plus `names` passed in (for a name that only ever starts sentences, "Juno");
+  "I" is not a name. The page marks those words `.w.name{text-transform:none}`. Checked on Sol Tomorrow, boxed
+  lowercase: "Sol said the same word every morning", "he just went". TRAP: the page script lives inside a TS template
+  literal, so a regex there needs `\\p{L}` in the source - with `\p{L}` the page got `p{L}`, matched nothing, and
+  the name stayed lowercase without any error.
+- CAPTIONS WORKFLOW (the user's rule, 2026-10-18): transcribe first, show the words with likely mishearings fixed,
+  get the user's OK, THEN make the video once. The playbook and the flow_captions description say so too.
+

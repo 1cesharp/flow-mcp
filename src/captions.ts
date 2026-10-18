@@ -78,6 +78,9 @@ export interface CaptionOptions {
   size: CaptionSize;
   color?: string;
   letters?: CaptionLetters;
+  // Names that keep their capitals in lowercase captions even where they start a sentence ("Juno"); names in the
+  // middle of a sentence are found by themselves.
+  names?: string[];
   // Seconds the highlight runs ahead of the voice (see LEAD).
   lead?: number;
   text?: string;
@@ -518,7 +521,21 @@ function textOn(hex: string): string {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6 ? "#111111" : "#FFFFFF";
 }
 
-function pageHtml(style: CaptionStyle, o: { width: number; height: number; position: CaptionPosition; size: CaptionSize; color: string; letters: CaptionLetters; lang: string; background?: string }): string {
+// Names keep their capitals in lowercase captions (the user's rule, 2026-10-18: "always capitalize names even if lower
+// case selected"). A name is a word written with a capital where no sentence starts - the speech model and the user's
+// corrections both capitalise names - and every other time that word appears, plus any names passed in. "I" is not a
+// name. Captions in capitals or as said need nothing: names are already right there.
+function namesIn(words: Word[], extra: string[] = []): string[] {
+  const names = new Set(extra.map(norm).filter(Boolean));
+  words.forEach((w, i) => {
+    const bare = w.text.replace(/^[^\p{L}\p{N}]+/u, "");
+    const startsSentence = i === 0 || w.br || SENTENCE_END.test(words[i - 1].text);
+    if (!startsSentence && /^\p{Lu}/u.test(bare) && !/^I(['’]|$)/u.test(bare)) names.add(norm(w.text));
+  });
+  return [...names];
+}
+
+function pageHtml(style: CaptionStyle, o: { width: number; height: number; position: CaptionPosition; size: CaptionSize; color: string; letters: CaptionLetters; lang: string; names?: string[]; background?: string }): string {
   const { width: W, height: H } = o;
   const vertical = H > W;
   const font = FONT[style] * (Math.min(W, H) / 100) * scaleOf(o.size);
@@ -550,13 +567,16 @@ html,body{margin:0;width:${W}px;height:${H}px;overflow:hidden;background:${o.bac
 .inner{display:block;transform-origin:50% 60%}
 ${css}
 .cap{text-transform:${{ as_said: "none", capitals: "uppercase", lowercase: "lowercase" }[o.letters]}}
+.w.name{text-transform:none}
 ${UNSPACED.has(lang) ? ".w{margin-left:.03em;margin-right:.03em}" + (style === "highlight" ? ".w{margin-left:-.07em;margin-right:-.07em}" : "") : ""}
 </style></head><body><div class="cap"><div class="inner" id="inner"></div></div><script>
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const NAMES = new Set(${JSON.stringify(o.letters === "lowercase" ? (o.names ?? []) : [])});
+const isName = (w) => NAMES.has(w.toLowerCase().replace(/[^\\p{L}\\p{N}']+/gu, ""));
 window.paint = (s) => {
   const el = document.getElementById("inner");
   el.style.transform = s.scale === 1 ? "" : "scale(" + s.scale + ")";
-  el.innerHTML = s.words.map((w, i) => '<span class="w' + (i === s.active ? " on" : "") + (${style === "reveal"} && i > s.active ? " later" : "") + '" data-t="' + esc(w) + '">' + esc(w) + "</span>").join(${JSON.stringify(joiner(lang))});
+  el.innerHTML = s.words.map((w, i) => '<span class="w' + (i === s.active ? " on" : "") + (isName(w) ? " name" : "") + (${style === "reveal"} && i > s.active ? " later" : "") + '" data-t="' + esc(w) + '">' + esc(w) + "</span>").join(${JSON.stringify(joiner(lang))});
 };
 </script></body></html>`;
 }
@@ -629,7 +649,7 @@ export async function previewCaptions(video: string, o: CaptionOptions): Promise
   await run(FFMPEG, ["-v", "error", "-y", "-ss", at.toFixed(3), "-i", video, "-frames:v", "1", "-q:v", "3", frame], BIG);
   const background = `data:image/jpeg;base64,${readFileSync(frame).toString("base64")}`;
   const image = join(CACHE_DIR, `preview-${key}.jpg`);
-  await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o), lang, background }), async (p) => {
+  await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o), lang, names: namesIn(words, o.names), background }), async (p) => {
     if (state) await p.evaluate((s) => (window as unknown as { paint: (s: unknown) => void }).paint(s), state);
     await p.screenshot({ path: image, type: "jpeg", quality: 85 });
   });
@@ -666,7 +686,7 @@ export async function burnCaptions(video: string, o: CaptionOptions, output: str
   try {
     // Draw every distinct caption once, as a transparent picture the size of the video.
     const files = new Map<string, string>();
-    await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o), lang }), async (p) => {
+    await withPage(info.width, info.height, pageHtml(o.style, { ...info, position: o.position, size: o.size, color: pickColor(o), letters: lettersOf(o), lang, names: namesIn(words, o.names) }), async (p) => {
       await p.screenshot({ path: join(work, "blank.png"), omitBackground: true });
       for (const s of states) {
         const id = JSON.stringify([s.words, s.active, s.scale]);
