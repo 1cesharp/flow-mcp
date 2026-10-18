@@ -1036,6 +1036,38 @@ export async function downloadAsset(name: string, targetStem: string, quality: D
 // is recoverable - and it never deletes permanently. Flow asks NO confirmation (mapped 2026-10-01: the tile menu's
 // "Move to trash" removes the tile at once), so whoever calls this must confirm with the user first. Matching is by
 // EXACT title, and an ambiguous title is refused: Flow reuses titles, and trashing the wrong one is the worst outcome.
+// How many tiles carry this exact title. scanGrid keeps one entry per title (the virtual grid shows the same tile again
+// as it scrolls), so it can never see two items with the same name: trashAsset's "two share it" guard never fired,
+// and Flow's agent reuses titles freely (three "Red fox sitting in snow" in one test, 2026-10-18). Images are told apart
+// by their media ids; id-less videos only when two of them are on screen together.
+async function countTitled(page: Page, name: string): Promise<number> {
+  await scrollToTop(page);
+  const ids = new Set<string>();
+  let together = 0;
+  for (let step = 0; step < 200; step++) {
+    const found = await page.evaluate(
+      ([js, title]) => {
+        const idOf = eval(js) as (t: Element) => string | undefined;
+        return [...document.querySelectorAll("flow-grid-tile-container")].filter((t) => t.getAttribute("aria-label") === title).map((t) => idOf(t) ?? "");
+      },
+      [TILE_ID_JS, name] as const,
+    );
+    together = Math.max(together, found.length);
+    for (const id of found) if (id && !id.startsWith("title:")) ids.add(id);
+    const moved = await page.evaluate(() => {
+      const el = document.querySelector(".page-container");
+      if (!el) return false;
+      const before = el.scrollTop;
+      el.scrollTop = before + el.clientHeight * 0.8;
+      return el.scrollTop > before;
+    });
+    if (!moved) break;
+    await pause(page, 500);
+  }
+  await scrollToTop(page);
+  return Math.max(ids.size, together);
+}
+
 export async function trashAsset(name: string): Promise<{ trashed: string }> {
   const state = await getFlowState();
   if (!state.signedIn || !state.inProject) throw new Error(state.hint);
@@ -1043,7 +1075,8 @@ export async function trashAsset(name: string): Promise<{ trashed: string }> {
   await ensureProjectGrid(page);
   const same = (await scanGrid(page)).filter((a) => a.name === name);
   if (!same.length) throw new Error(`Nothing in the open project is called "${name}".`);
-  if (same.length > 1) throw new Error(`${same.length} items are called "${name}", so it isn't clear which one to trash. Rename one in Flow first.`);
+  const copies = await countTitled(page, name);
+  if (copies > 1) throw new Error(`${copies} items are called "${name}", so it isn't clear which one to trash. Rename one in Flow first.`);
   // Scan again, stopping on the tile so it stays mounted in the virtual grid (no scrollToTop before acting on it).
   await scanGrid(page, (seen) => seen.some((a) => a.name === name));
   const tile = tileOf(page, same[0]);
@@ -1389,6 +1422,8 @@ async function agentRound(
 ): Promise<RoundOutcome> {
   const s = job.params;
   const aspect = s.aspect_ratio ?? "16:9";
+  const base = Number(s.file_stem.match(/\d+/)?.[0] ?? 1);
+  const numberOf = (i: number) => s.agent_numbers?.[i] ?? base + i;
   await ensureProjectGrid(page);
   const seenBefore = await scanGrid(page);
   // Ids are unique per generation; titles are not (the agent reuses wording), so only id-less tiles fall back to a name.
@@ -1398,7 +1433,7 @@ async function agentRound(
 
   const clear = page.getByRole("button", { name: "Clear prompt" });
   if (await clear.isVisible().catch(() => false)) await clear.click();
-  const script = indexes.map((i) => `Scene ${i + 1}: ${scenes[i].replace(/\s*\n+\s*/g, " ").trim()}`).join(" ");
+  const script = indexes.map((i) => `Scene ${numberOf(i)}: ${scenes[i].replace(/\s*\n+\s*/g, " ").trim()}`).join(" ");
   const lead = retry
     ? `${indexes.length} image(s) from the last batch failed to generate. Generate them again now, one image per scene`
     : `Generate exactly ${indexes.length} separate images, one image per scene, in scene order`;
@@ -1460,16 +1495,15 @@ async function agentRound(
   );
   const drop = Number(process.env.FLOW_MCP_SIMULATE_MISSING ?? 0); // test hook: pretend this scene number failed
   mkdirSync(s.output_dir, { recursive: true });
-  const base = Number(s.file_stem.match(/\d+/)?.[0] ?? 1);
   let produced = 0;
   for (const [n, tileIndexes] of assigned.entries()) {
     const sceneIndex = indexes[n];
-    if (!tileIndexes.length || sceneIndex + 1 === drop) continue;
+    if (!tileIndexes.length || (numberOf(sceneIndex) === drop && !s.agent_numbers)) continue;
     for (const [v, tileIndex] of tileIndexes.entries()) {
       const id = fresh[tileIndex].id!;
       await scanGrid(page, (seen) => seen.some((x) => x.id === id));
-      const stem = join(s.output_dir, `scene-${String(base + sceneIndex).padStart(2, "0")}${v ? `-v${v + 1}` : ""}`);
-      step(job, `downloading scene ${sceneIndex + 1}`);
+      const stem = join(s.output_dir, `scene-${String(numberOf(sceneIndex)).padStart(2, "0")}${v ? `-v${v + 1}` : ""}`);
+      step(job, `downloading scene ${numberOf(sceneIndex)}`);
       files.push(...(await downloadTile(page, mediaTile(page, id), stem, s.download_quality ?? "original")));
       await pause(page, 800);
     }
@@ -1648,8 +1682,14 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
   const missing = scenes.map((_, i) => i).filter((i) => !done.has(i));
   const failed: number[] = [];
   const base = Number(s.file_stem.match(/\d+/)?.[0] ?? 1);
+  const numberOf = (i: number) => s.agent_numbers?.[i] ?? base + i;
+  const stillFails = Number(process.env.FLOW_MCP_SIMULATE_FAILED ?? 0); // test hook: pretend this scene failed for good
   for (const [n, i] of missing.entries()) {
-    job.progress = `re-running scene ${i + 1} one by one (${n + 1}/${missing.length})`;
+    job.progress = `re-running scene ${numberOf(i)} one by one (${n + 1}/${missing.length})`;
+    if (numberOf(i) === stillFails && !job.params.agent_numbers) {
+      failed.push(numberOf(i));
+      continue;
+    }
     const single: Job = {
       ...job,
       files: [],
@@ -1660,7 +1700,7 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
         aspect_ratio: s.aspect_ratio,
         download_quality: s.download_quality,
         output_dir: s.output_dir,
-        file_stem: `scene-${String(base + i).padStart(2, "0")}`,
+        file_stem: `scene-${String(numberOf(i)).padStart(2, "0")}`,
       },
     };
     let ok = false;
@@ -1673,20 +1713,22 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
         /* one more attempt, then give up on this scene */
       }
     }
-    if (!ok) failed.push(i + 1);
+    if (!ok) failed.push(numberOf(i));
   }
+  job.failed_scenes = failed.length ? failed : undefined;
   step(job, "reading the credit balance");
   const left = await readCredits(page).catch(() => undefined);
   step(job, undefined);
   files.sort();
   job.note = [
+    // What still needs doing first: the panel shows only the start of a long note.
+    failed.length ? `still failed: scene ${failed.join(", ")} (use Retry)` : "",
     agentProblem ? `agent mode failed (${agentProblem}), so the images were made one by one` : "",
     agentTimedOut ? "the agent stalled and was stopped" : "",
     `${done.size} of ${scenes.length} scenes came from the agent`,
     agentRetries ? `${agentRetries} asked again` : "",
     failedTiles ? `${failedTiles} tile(s) failed in Flow` : "",
-    missing.length ? `${missing.length - failed.length} re-run one by one` : "",
-    failed.length ? `still failed: scene ${failed.join(", ")} (use Retry)` : "",
+    missing.length > failed.length ? `${missing.length - failed.length} re-run one by one` : "",
   ]
     .filter(Boolean)
     .join(" · ");

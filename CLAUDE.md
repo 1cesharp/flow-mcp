@@ -412,3 +412,16 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
   the start.) freshMedia now counts a video tile without its thumbnail (or a <video>) as busy, and waitForNewMedia
   takes title-tracked tiles only once the same titles show on two polls running. Same clip with the fix: done in
   48 s, renamed SettleTest-scene-01, 4.0 s file downloaded.
+- RETRY ONLY THE FAILED IMAGES (2026-10-18, the user's request). A batch that ends "done" with some scenes still
+  failed (after the agent was asked again and the one-by-one route) now records job.failed_scenes (scene numbers).
+  flow_retry on such a job queues a NEW agent batch of just those scenes with agent_numbers, so they save as scene-07,
+  scene-12 (numberOf() in agentRound and the one-by-one fallback); the list moves to the new job so it is never retried
+  twice. The Monitor shows "Retry N failed image(s)" on that batch (before, Retry only showed on failed jobs, and would
+  have re-run the whole batch). The note now starts with "still failed: ..." (the panel clamps notes to two lines).
+  Test hooks: FLOW_MCP_SIMULATE_MISSING=n drops scene n from agent rounds, FLOW_MCP_SIMULATE_FAILED=n skips its
+  one-by-one rerun; neither applies to a retry batch. Verified live, 0 credits: 3 scenes with 2 forced to fail ->
+  done with scene-01/03 and "still failed: scene 2", the panel button pressed in a headless panel -> only scene-02
+  made -> folder 01, 02, 03; the button gone afterwards.
+- TRASH GUARD WAS BLIND TO DUPLICATES: scanGrid keeps one entry per title, so trashAsset's "two items share this name"
+  check never fired and it trashed one of several same-titled tiles. countTitled() counts copies by media id (images)
+  and by how many show at once (id-less videos). Verified: three "Red fox sitting in snow" -> refused.
