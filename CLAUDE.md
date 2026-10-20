@@ -425,3 +425,10 @@ The preview tool could not read the project while it lived in ~/Desktop; check t
 - TRASH GUARD WAS BLIND TO DUPLICATES: scanGrid keeps one entry per title, so trashAsset's "two items share this name"
   check never fired and it trashed one of several same-titled tiles. countTitled() counts copies by media id (images)
   and by how many show at once (id-less videos). Verified: three "Red fox sitting in snow" -> refused.
+- BULK DOWNLOAD PACE (2026-10-19, the user's call: "trim down to random 4-4.4"). A 20-image agent batch took 231 s,
+  113 s of it downloads at ~5.6 s each, all in the steps around Flow's tile menu (More options -> Download -> 1K
+  Original size): a grid re-scan before every tile, hoverTile's fixed 900 ms, waitForDownloadedFile polling once a
+  second (two equal sizes = 2 s minimum), and a fixed 800 ms after. Now: no re-scan when the tile is already mounted,
+  a 250 ms hover then a wait for the More options button itself (locator.isVisible({ timeout }) does NOT wait - it
+  answers at once), 250 ms polling, and each download held to a random 4-4.4 s (downloadPace). Measured on 6 images:
+  4.2, 4.1, 4.2, 4.0, 4.4, 4.4 s, all 1024x1024 originals in scene order. Other hoverTile callers keep 900 ms.

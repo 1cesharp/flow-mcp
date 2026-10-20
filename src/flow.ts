@@ -544,7 +544,9 @@ async function waitForDownloadedFile(page: Page, before: Set<string>, timeoutMs:
   const deadline = Date.now() + timeoutMs;
   let stable: { path: string; size: number } | undefined;
   while (Date.now() < deadline) {
-    await pause(page, 1000);
+    // Every quarter second: an image is there in well under a second, and a size that held still across two checks
+    // still proves Chrome has finished writing it.
+    await pause(page, 250);
     // Both places: ours, and Chrome's own folder for when the override has been reset behind our back.
     const candidates: string[] = [];
     for (const dir of [DOWNLOAD_DIR, SYSTEM_DOWNLOADS]) {
@@ -564,15 +566,15 @@ async function waitForDownloadedFile(page: Page, before: Set<string>, timeoutMs:
 }
 
 // Flow reveals a tile's controls on a genuine pointer move, so the mouse is driven to the tile itself.
-async function hoverTile(page: Page, tile: Locator): Promise<void> {
+async function hoverTile(page: Page, tile: Locator, settleMs = 900): Promise<void> {
   await tile.scrollIntoViewIfNeeded();
   const box = await tile.boundingBox();
   if (box) {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await pause(page, 900);
+    await pause(page, settleMs);
   } else {
     await tile.hover();
-    await pause(page, 900);
+    await pause(page, settleMs);
   }
 }
 
@@ -651,9 +653,10 @@ async function downloadTile(page: Page, target: Locator | TileResolver, targetSt
       const before = downloadsNow();
       // Flow only shows a tile's toolbar for a real pointer move over it - Playwright's hover() does not trigger it.
       // The toolbar's "More options" beats a right-click, which can land on the <video> and raise Chrome's own menu.
-      await hoverTile(page, tile);
+      await hoverTile(page, tile, 250);
       const more = tile.getByRole("button", { name: "More options" });
-      if (await more.isVisible({ timeout: 3000 }).catch(() => false)) await more.click();
+      // isVisible() answers at once whatever timeout it is given, so wait for the button itself.
+      if (await more.waitFor({ state: "visible", timeout: 3000 }).then(() => true, () => false)) await more.click();
       else await tile.click({ button: "right" });
       const download = page.getByRole("menuitem", { name: "Download", exact: true });
       if (!(await download.isVisible({ timeout: 8000 }).catch(() => false))) {
@@ -1402,6 +1405,10 @@ interface RoundOutcome {
 
 // One pass through Flow's agent for the given scene numbers: ask, wait, match the new tiles back to those scenes
 // and download them. Returns how many scenes it actually delivered.
+// Bulk downloads go at an even, human pace: as quick as the steps allow (about 2.5 s), then held to a random 4-4.4 s each
+// (the user's call, 2026-10-19), in the spirit of the random pauses between generations. Before, each took ~5.6 s.
+const downloadPace = () => 4000 + Math.random() * 400;
+
 // Progress the panel and flow_wait show; with FLOW_MCP_DEBUG set, also a timed line on stderr to find slow steps.
 const t0s = new WeakMap<Job, number>();
 function step(job: Job, text: string | undefined): void {
@@ -1501,11 +1508,13 @@ async function agentRound(
     if (!tileIndexes.length || (numberOf(sceneIndex) === drop && !s.agent_numbers)) continue;
     for (const [v, tileIndex] of tileIndexes.entries()) {
       const id = fresh[tileIndex].id!;
-      await scanGrid(page, (seen) => seen.some((x) => x.id === id));
+      const started = Date.now();
+      // New tiles sit at the top of the grid, so a scan is only needed when this one has scrolled out of the page.
+      if (!(await mediaTile(page, id).count())) await scanGrid(page, (seen) => seen.some((x) => x.id === id));
       const stem = join(s.output_dir, `scene-${String(numberOf(sceneIndex)).padStart(2, "0")}${v ? `-v${v + 1}` : ""}`);
       step(job, `downloading scene ${numberOf(sceneIndex)}`);
       files.push(...(await downloadTile(page, mediaTile(page, id), stem, s.download_quality ?? "original")));
-      await pause(page, 800);
+      await pause(page, Math.max(0, downloadPace() - (Date.now() - started)));
     }
     done.add(sceneIndex);
     produced++;
