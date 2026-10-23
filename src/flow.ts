@@ -1440,11 +1440,36 @@ async function agentRound(
 
   const clear = page.getByRole("button", { name: "Clear prompt" });
   if (await clear.isVisible().catch(() => false)) await clear.click();
-  const script = indexes.map((i) => `Scene ${numberOf(i)}: ${scenes[i].replace(/\s*\n+\s*/g, " ").trim()}`).join(" ");
+  // Reference images ride along as ingredient chips, attached the way the + button does, once per round (the composer
+  // is cleared between rounds). The script then names them, and each scene says which ones it uses.
+  const refs = s.agent_refs ?? [];
+  const assets = s.agent_ref_assets ?? [];
+  if (refs.length) {
+    for (const [k, name] of assets.entries()) {
+      step(job, `attaching reference ${k + 1} of ${assets.length}`);
+      await attachAsset(page, page.getByRole("button", { name: "Add ingredients to the prompt box" }), name);
+      await pause(page, 700);
+    }
+    const attached = await page.getByRole("button", { name: "Ingredient" }).count();
+    if (attached < assets.length) throw new Error(`Only ${attached} of ${assets.length} reference image(s) attached in the agent composer.`);
+  }
+  const usesOf = (i: number) => s.agent_scene_refs?.[i];
+  const script = indexes
+    .map((i) => {
+      const uses = usesOf(i);
+      const tag = !refs.length || !uses ? "" : uses.length ? ` (use references: ${uses.join(", ")})` : " (no reference)";
+      return `Scene ${numberOf(i)}${tag}: ${scenes[i].replace(/\s*\n+\s*/g, " ").trim()}`;
+    })
+    .join(" ");
+  const legend = refs.length
+    ? ` The ${refs.length} attached image(s) are references: ${refs.map((r, k) => `${assets[k] ?? `image ${k + 1}`} is ${r.name}`).join("; ")}. ` +
+      `Whenever a scene shows one of them, keep it exactly as it looks in its reference (face, hair, clothing, shape, colours), ` +
+      `but stage each scene as its own description says; the references are for likeness only, never copy their pose or background.`
+    : "";
   const lead = retry
     ? `${indexes.length} image(s) from the last batch failed to generate. Generate them again now, one image per scene`
     : `Generate exactly ${indexes.length} separate images, one image per scene, in scene order`;
-  const ask = `${lead}. Images only, never video. ${aspect} aspect ratio. Do not ask questions, generate them now. ${script}`;
+  const ask = `${lead}. Images only, never video. ${aspect} aspect ratio. Do not ask questions, generate them now.${legend} ${script}`;
   await page.locator(".ProseMirror").first().click();
   await page.keyboard.insertText(ask);
   await pause(page, 800);
@@ -1657,6 +1682,17 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
   let agentRetries = 0;
   let agentProblem = "";
   try {
+    // References are uploaded once with readable names (the agent sees them), before Agent mode hides the upload menu.
+    if (s.agent_refs?.length && !s.agent_ref_assets?.length) {
+      await setAgentMode(page, false);
+      const assets: string[] = [];
+      for (const [k, r] of s.agent_refs.entries()) {
+        step(job, `uploading reference ${k + 1} of ${s.agent_refs.length} (${r.name})`);
+        const label = r.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 24) || `ref${k + 1}`;
+        assets.push(await uploadAsset(page, job, r.image, label));
+      }
+      s.agent_ref_assets = assets;
+    }
     step(job, "switching Agent mode on");
     await setAgentMode(page, true);
     step(job, "setting the agent to generate without asking");
@@ -1693,6 +1729,17 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
   const base = Number(s.file_stem.match(/\d+/)?.[0] ?? 1);
   const numberOf = (i: number) => s.agent_numbers?.[i] ?? base + i;
   const stillFails = Number(process.env.FLOW_MCP_SIMULATE_FAILED ?? 0); // test hook: pretend this scene failed for good
+  // A scene made one by one keeps its references: the uploaded copies when there are some, else the original files.
+  const refsFor = (i: number): string[] | undefined => {
+    const refs = s.agent_refs ?? [];
+    if (!refs.length) return undefined;
+    const uses = s.agent_scene_refs?.[i];
+    const picked = refs
+      .map((r, k) => ({ r, k }))
+      .filter(({ r }) => !uses || uses.some((u) => u.toLowerCase() === r.name.toLowerCase()))
+      .slice(0, 3);
+    return picked.length ? picked.map(({ r, k }) => (s.agent_ref_assets?.[k] ? `${ASSET_PREFIX}${s.agent_ref_assets[k]}` : r.image)) : undefined;
+  };
   for (const [n, i] of missing.entries()) {
     job.progress = `re-running scene ${numberOf(i)} one by one (${n + 1}/${missing.length})`;
     if (numberOf(i) === stillFails && !job.params.agent_numbers) {
@@ -1706,6 +1753,7 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
         prompt: scenes[i],
         type: "image",
         max_credits: 0,
+        reference_images: refsFor(i),
         aspect_ratio: s.aspect_ratio,
         download_quality: s.download_quality,
         output_dir: s.output_dir,
@@ -1735,6 +1783,7 @@ export async function runAgentBatch(job: Job): Promise<string[]> {
     agentProblem ? `agent mode failed (${agentProblem}), so the images were made one by one` : "",
     agentTimedOut ? "the agent stalled and was stopped" : "",
     `${done.size} of ${scenes.length} scenes came from the agent`,
+    s.agent_refs?.length ? `${s.agent_refs.length} reference image(s) attached` : "",
     agentRetries ? `${agentRetries} asked again` : "",
     failedTiles ? `${failedTiles} tile(s) failed in Flow` : "",
     missing.length > failed.length ? `${missing.length - failed.length} re-run one by one` : "",

@@ -21,6 +21,12 @@ export interface SceneParams {
   // The scene number each agent scene is saved as. A retry of scenes 7 and 12 keeps scene-07 and scene-12; without it
   // the numbers run on from file_stem.
   agent_numbers?: number[];
+  // Reference images for an agent batch: attached once as ingredients in the agent composer (absolute paths, uploaded
+  // once, or "asset:<title>"), with a short name each, plus which of them every scene uses (names, per scene).
+  agent_refs?: { image: string; name: string }[];
+  agent_scene_refs?: string[][];
+  // Flow asset names of agent_refs after upload, so a retry round re-attaches without uploading again.
+  agent_ref_assets?: string[];
   continue_from?: string;
   attach?: string[];
   continue_mode?: "exact" | "likeness";

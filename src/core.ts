@@ -156,6 +156,22 @@ export const shapes = {
     scenes: z.array(z.string().min(1)).min(1).max(50).describe("One image description per scene, in order."),
     aspect_ratio: z.enum(["16:9", "9:16", "1:1", "4:3", "3:4"]).default("16:9"),
     download_quality: z.enum(["original", "upscaled"]).optional(),
+    references: z
+      .array(
+        z.object({
+          image: z.string().min(1).describe("Absolute image path, or 'asset:<title>' for an image or character already in the Flow project."),
+          name: z.string().min(1).max(40).describe("Short name the scenes use for it, e.g. 'Ines' or 'the station'."),
+        }),
+      )
+      .max(10)
+      .optional()
+      .describe(
+        "Reference images for the whole batch (characters, places, objects), attached once in the agent's composer like the + button does, so every scene stays on-model. Pair with scene_references to say which scenes use which.",
+      ),
+    scene_references: z
+      .array(z.array(z.string()))
+      .optional()
+      .describe("One list per scene, in scene order: the reference names that scene uses (empty list for none). Without it the agent decides which references fit each scene."),
   },
   voices: {},
   narrate: {
@@ -423,6 +439,7 @@ export class LocalCore implements Core {
             prompt: `Agent batch: ${pick.length} failed image(s) again`,
             agent_scenes: pick.map((i) => p.agent_scenes![i]),
             agent_numbers: pick.map((i) => numbers[i]),
+            agent_scene_refs: p.agent_scene_refs ? pick.map((i) => p.agent_scene_refs![i]) : undefined,
             file_stem: `scene-${String(numbers[pick[0]]).padStart(2, "0")}`,
           }),
         );
@@ -521,9 +538,20 @@ export class LocalCore implements Core {
     return `${prefix}-${String(Math.max(0, ...onDisk, ...queued) + 1).padStart(2, "0")}`;
   }
 
-  async agent({ project, scenes, aspect_ratio, download_quality }: Args<"agent">) {
+  async agent({ project, scenes, aspect_ratio, download_quality, references, scene_references }: Args<"agent">) {
     const output_dir = projectDir(project);
+    if (scene_references && scene_references.length !== scenes.length) {
+      throw new Error(`scene_references has ${scene_references.length} entries for ${scenes.length} scenes; give one list per scene (empty for none).`);
+    }
+    const known = new Set((references ?? []).map((r) => r.name.toLowerCase()));
+    const unknown = [...new Set((scene_references ?? []).flat().filter((n) => !known.has(n.toLowerCase())))];
+    if (unknown.length) throw new Error(`scene_references names ${unknown.map((n) => `"${n}"`).join(", ")}, which is not in references.`);
+    for (const r of references ?? []) {
+      if (!r.image.startsWith("asset:") && !existsSync(r.image)) throw new Error(`Reference image not found: ${r.image}`);
+    }
     const job = this.queue.add({
+      agent_refs: references?.length ? references : undefined,
+      agent_scene_refs: references?.length ? scene_references : undefined,
       prompt: `Agent batch: ${scenes.length} images`,
       type: "image",
       max_credits: 0,
