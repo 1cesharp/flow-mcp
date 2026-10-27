@@ -372,24 +372,16 @@ export class LocalCore implements Core {
     const jobs: Job[] = [];
     for (const [i, { chain_previous, reference_previous, technique, ...scene }] of scenes.entries()) {
       const phrase = technique ? techniqueById(technique)!.phrase : "";
-      // A referenced character must come out identical, not merely similar, so the scene says so explicitly. The
-      // wording stays medium-neutral: the same lock has to serve a flat cartoon character and a photoreal avatar.
-      const cast = (scene.reference_images ?? [])
-        .filter((r) => r.startsWith("asset:"))
-        .map((r) => r.slice(6).trim())
-        .filter((n) => characterLook(n) !== undefined || /^[\w .'-]{1,60}$/.test(n));
-      const lock = cast.length
-        ? ` CHARACTER LOCK — ${cast.join(" and ")} must match the reference image exactly, as if copying it: same head shape and size, same face, same eyes, same hair, same skin, same build and proportions, same clothing items in the same colours, same hands, and the same rendering style and level of realism as the reference. Never redesign, restyle, re-proportion, re-age or re-colour them, and never swap an item for a similar one.${cast
-            .map((n) => (characterLook(n) ? ` ${n} is exactly: ${characterLook(n)}.` : ""))
-            .join("")}`
-        : "";
+      // No text is added for attached characters: the caller's prompt says how a reference is used (Flow's own
+      // guidance), and the driver only attaches it. A fixed "copy the reference exactly" sentence here overrode
+      // scene wardrobe, light and pose (Tang S05 H01, 2026-10-27).
       const inherit = reference_previous
         ? " Match the previous image exactly for the subject's appearance, colour palette, lighting and rendering style; this is the same scene a moment later."
         : "";
       jobs.push(
         this.queue.add({
           ...scene,
-          prompt: `${scene.prompt.trim().replace(/\.?$/, ".")}${phrase ? ` ${phrase}` : ""}${lock}${inherit}`,
+          prompt: `${scene.prompt.trim().replace(/\.?$/, ".")}${phrase ? ` ${phrase}` : ""}${inherit}`,
           chain_from: chain_previous ? jobs[i - 1].id : undefined,
           reference_from: reference_previous ? jobs[i - 1].id : undefined,
           output_dir,
